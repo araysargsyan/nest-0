@@ -1,13 +1,8 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ProductModule } from './product/product.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      envFilePath: `.env`,
-      expandVariables: true,
-      isGlobal: true,
-    }),
-  ],
+  imports: [ProductModule, CommonModule],
 })
 export class AppModule {}
