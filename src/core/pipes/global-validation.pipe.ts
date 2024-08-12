@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, Logger, PipeTransform, Scope, ValidationError } from '@nestjs/common';
-import { isArray, validate, ValidatorOptions } from 'class-validator';
+import { validate, ValidatorOptions } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { IArgumentMetadata, TUniqueKeys } from './types';
 import { REQUEST } from '@nestjs/core';

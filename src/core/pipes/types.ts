@@ -1,6 +1,5 @@
 import { ValidatorOptions } from 'class-validator';
 import { ArgumentMetadata as NextArgumentMetadata } from '@nestjs/common';
-import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 
 
 type TUniqueKey = null | 'pending' | boolean
