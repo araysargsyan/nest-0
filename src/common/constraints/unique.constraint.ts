@@ -4,6 +4,7 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { IValidationArguments } from '../types';
+import { ValidationArguments } from 'class-validator/types/validation/ValidationArguments';
 
 @ValidatorConstraint({ async: true, name: 'isUnique' })
 @Injectable()
@@ -26,8 +27,8 @@ class UniqueConstraint implements ValidatorConstraintInterface {
     return uniqueKeys[args.property] === true || uniqueKeys[args.property] === null;
   }
 
-  defaultMessage(): string {
-    return 'Email $value уже используется';
+  defaultMessage({property, value}: ValidationArguments): string {
+    return `Property ${property} with value=${value} already exists`;
   }
 }
 

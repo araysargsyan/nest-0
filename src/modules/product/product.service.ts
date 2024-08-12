@@ -1,21 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../shared/prisma/prisma.service';
-import { CreateProductDto } from './dto/create-product.dto';
 
 @Injectable()
 export class ProductService {
   constructor(private readonly prisma: PrismaService) {
   }
 
-  create(createProductDto: CreateProductDto) {
+  create(createProductDto: Prisma.ProductCreateInput) {
     return this.prisma.product.create({ data: createProductDto });
   }
 
-  findAll() {
-    this.prisma.user.findMany().then((d) => {
-      console.log(d);
+  createDocument(document: string, productId: number) {
+    return this.prisma.product.update({
+      where: {id: productId},
+      data: {document}
     });
+  }
+
+  findAll() {
     return 'This action returns all product';
   }
 

@@ -1,13 +1,12 @@
 import { Prisma } from '@prisma/client';
-import { IsNumber, IsString, MinLength } from 'class-validator';
-import { ValidatorOptions } from '~/decorators/validator-options.decorator';
+import { IsNumber, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
 
-@ValidatorOptions(null)
-export class CreateProductDto implements Prisma.ProductCreateInput {
+export class CreateProductDto implements Omit<Prisma.ProductCreateInput, 'image'> {
   @IsString()
-  @MinLength(4)
   name: string;
 
   @IsNumber()
-  prise: number;
+  @Transform(({ value }) => Number(value))
+  price: number;
 }

@@ -1,5 +1,6 @@
 import { ValidatorOptions } from 'class-validator';
 import { ArgumentMetadata as NextArgumentMetadata } from '@nestjs/common';
+import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 
 
 type TUniqueKey = null | 'pending' | boolean
@@ -11,3 +12,11 @@ export interface IArgumentMetadata extends NextArgumentMetadata {
     uniqueKeys?: Record<string, null | 'pending' | boolean>;
   };
 }
+
+export interface IFileValidationPipeOptions {
+  fileType?: string[],
+  fileIsRequired?: boolean
+}
+
+export const FIELD_NAME_FROM_REQ = 'FIELD_NAME_FROM_REQ' as const;
+export const PARSE_JSON = 'PARSE_JSON' as const;

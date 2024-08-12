@@ -1,14 +1,13 @@
-import {
-  BadRequestException,
-  Injectable,
-  PipeTransform, ValidationError,
-} from '@nestjs/common';
-import { validate, ValidatorOptions } from 'class-validator';
+import { BadRequestException, Inject, Injectable, Logger, PipeTransform, Scope, ValidationError } from '@nestjs/common';
+import { isArray, validate, ValidatorOptions } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { IArgumentMetadata, TUniqueKeys } from './types';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
 
-@Injectable()
+@Injectable({scope: Scope.REQUEST})
 export class GlobalValidationPipe implements PipeTransform {
+  private readonly logger = new Logger('GlobalValidationPipe')
   private validatorOptions: ValidatorOptions = {
     skipMissingProperties: false,
     skipUndefinedProperties: false,
@@ -18,15 +17,30 @@ export class GlobalValidationPipe implements PipeTransform {
     forbidUnknownValues: true,
   };
 
-  async transform(value: unknown, metadata: IArgumentMetadata) {
-    console.log('GlobalValidationPipe: START', metadata.metatype);
-    const extraValidationOptions = metadata.metatype?.validatorOptions;
-    const skipValidation = extraValidationOptions === null;
+  constructor(
+    @Inject(REQUEST) protected readonly request: Request,
+  ) {}
 
-    if (skipValidation) return value;
+  async transform(value: unknown, metadata: IArgumentMetadata) {
+    const extraValidationOptions = metadata.metatype?.validatorOptions;
+    const skipValidation = extraValidationOptions === null || metadata.type === 'custom';
+
+    if (skipValidation) {
+      this.logger.debug(`Skip ${metadata.type}`)
+      return value;
+    }
+
+    this.logger.debug(`START -> ${JSON.stringify({
+      metadata,
+      value,
+      skipValidation,
+      extraValidationOptions,
+    }, null, 2)}`);
 
     const { instance, errors } = await this.validate(metadata.metatype, value, extraValidationOptions);
-    console.log('GlobalValidationPipe: FINISH', { instance, errors });
+
+    this.logger.debug(`FINISH -> ${JSON.stringify({instance, errors}, null, 2)}`)
+
     if (errors) {
       throw new BadRequestException(errors);
     }
@@ -37,6 +51,10 @@ export class GlobalValidationPipe implements PipeTransform {
   private async validate(metatype: IArgumentMetadata['metatype'], value: unknown, extraValidationOptions: ValidatorOptions) {
     const uniqueKeys: TUniqueKeys = metatype.prototype.uniqueKeys;
     const errors: ValidationError[] = [];
+    const validatorOptions = {
+      ...this.validatorOptions,
+      ...extraValidationOptions,
+    }
 
     if (uniqueKeys) {
       const uniqueKeysArr = Object.keys(uniqueKeys);
@@ -49,16 +67,14 @@ export class GlobalValidationPipe implements PipeTransform {
             target: metatype,
             properties: { [key]: metatype },
           }],
-          // excludePrefixes: Object.keys(value).filter((k) => k !== key)
         });
 
         errors.push(...(await validate(uniqueInstance, {
-          ...this.validatorOptions,
-          ...extraValidationOptions,
+          ...validatorOptions,
           stopAtFirstError: true,
         })));
 
-        console.log('after validate uniques', { key, errors, uniqueKeys });
+        // console.log('after validate unique', { key, errors, uniqueKeys });
 
         if (errors.length) break;
       }
@@ -87,12 +103,9 @@ export class GlobalValidationPipe implements PipeTransform {
         }],
       });
 
-      errors.push(...(await validate(noneUniqueInstance, {
-        ...this.validatorOptions,
-        ...extraValidationOptions,
-      })));
+      errors.push(...(await validate(noneUniqueInstance, validatorOptions)));
 
-      console.log('after validate all', { errors, uniqueKeys });
+      // console.log('after validate all', { errors, uniqueKeys });
 
       return {
         instance: plainToInstance(metatype, value),
@@ -103,11 +116,7 @@ export class GlobalValidationPipe implements PipeTransform {
 
       return {
         instance: instance,
-        errors: this.extractErrors(await validate(instance, {
-          ...this.validatorOptions,
-          ...extraValidationOptions,
-          stopAtFirstError: true,
-        })),
+        errors: this.extractErrors(await validate(instance, validatorOptions)),
       };
     }
   }
