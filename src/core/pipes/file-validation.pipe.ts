@@ -7,17 +7,11 @@ import {
   PipeTransform,
 } from '@nestjs/common';
 import { isArray, isObject } from 'class-validator';
-import { IFileValidationPipeOptions } from './types';
+import { FileValidationPipeAM, IFileValidationPipeOptions } from './types';
 import { UploadFileTypeValidator } from '~validator/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
 import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.interface';
 
-interface FileValidationPipeAM extends ArgumentMetadata {
-  metatype?: ArgumentMetadata['metatype'] & {
-    filesCount?: number,
-    fieldname?: string | string[]
-  };
-}
 
 @Injectable()
 export class FileValidationPipe implements PipeTransform {

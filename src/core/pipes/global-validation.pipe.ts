@@ -1,9 +1,10 @@
 import { BadRequestException, Inject, Injectable, Logger, PipeTransform, Scope, ValidationError } from '@nestjs/common';
 import { validate, ValidatorOptions } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { IArgumentMetadata, TUniqueKeys } from './types';
+import { IArgumentMetadataGP } from './types';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
+import { TUniqueKeys } from '~types';
 
 @Injectable({scope: Scope.REQUEST})
 export class GlobalValidationPipe implements PipeTransform {
@@ -21,7 +22,7 @@ export class GlobalValidationPipe implements PipeTransform {
     @Inject(REQUEST) protected readonly request: Request,
   ) {}
 
-  async transform(value: unknown, metadata: IArgumentMetadata) {
+  async transform(value: unknown, metadata: IArgumentMetadataGP) {
     const extraValidationOptions = metadata.metatype?.validatorOptions;
     const skipValidation = extraValidationOptions === null || metadata.type === 'custom';
 
@@ -48,7 +49,7 @@ export class GlobalValidationPipe implements PipeTransform {
     return instance;
   }
 
-  private async validate(metatype: IArgumentMetadata['metatype'], value: unknown, extraValidationOptions: ValidatorOptions) {
+  private async validate(metatype: IArgumentMetadataGP['metatype'], value: unknown, extraValidationOptions: ValidatorOptions) {
     const uniqueKeys: TUniqueKeys = metatype.prototype.uniqueKeys;
     const errors: ValidationError[] = [];
     const validatorOptions = {
