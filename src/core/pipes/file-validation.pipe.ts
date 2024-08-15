@@ -6,16 +6,24 @@ import {
   ParseFilePipeBuilder,
   PipeTransform,
 } from '@nestjs/common';
-import { isArray } from 'class-validator';
-import { FIELD_NAME_FROM_REQ, IFileValidationPipeOptions, PARSE_JSON } from './types';
+import { isArray, isObject } from 'class-validator';
+import { IFileValidationPipeOptions } from './types';
 import { UploadFileTypeValidator } from '~validator/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
+import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.interface';
+
+interface FileValidationPipeAM extends ArgumentMetadata {
+  metatype?: ArgumentMetadata['metatype'] & {
+    filesCount?: number,
+    fieldname?: string | string[]
+  };
+}
 
 @Injectable()
 export class FileValidationPipe implements PipeTransform {
-  private logger = new Logger('FileValidationPipe')
-  private readonly fileIsRequired: boolean;
-  private readonly fileType: string[];
+  private logger = new Logger('FileValidationPipe');
+  private readonly fileIsRequired: IFileValidationPipeOptions['fileIsRequired'];
+  private readonly fileType: IFileValidationPipeOptions['fileType'];
   private readonly parseFilePipe: ParseFilePipeBuilder = new ParseFilePipeBuilder();
 
   constructor(
@@ -26,56 +34,91 @@ export class FileValidationPipe implements PipeTransform {
   }
 
   async transform(
-    value: Express.Multer.File | Express.Multer.File[] | undefined,
-    metadata: ArgumentMetadata
+    value: Express.Multer.File | Express.Multer.File[] | Record<string, Express.Multer.File[]> | undefined,
+    metadata: FileValidationPipeAM,
   ) {
-    let pipe: ParseFilePipe
-    this.logger.debug(JSON.stringify({value, metadata}, null, 2));
+    this.logger.debug(`Start... \n ${JSON.stringify({
+      fileIsRequired: this.fileIsRequired,
+      fileType: this.fileType, 
+    }, null, 2)}`);
+    let pipe: ParseFilePipe;
 
     if (metadata.type === 'custom') {
-      if ((!value || (isArray(value) && !value.length)) && this.fileIsRequired) {
-        pipe = this.generatePipe(HttpStatus.BAD_REQUEST)
+      const filesCount = metadata.metatype.filesCount;
+      console.log('FileValidationPipe: INFO', {
+        isMulti: isArray(metadata.metatype.fieldname),
+        filesCount,
+        value,
+        metadata
+      });
+
+      if (
+        (!value
+          || (isArray(value) && !value.length)
+          || (isObject(value) && !Object.keys(value).length)
+        ) && this.fileIsRequired
+      ) {
+        this.logger.verbose('EmptyFiles');
+        pipe = this.generatePipe(HttpStatus.BAD_REQUEST, filesCount);
       } else {
-        pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY)
+        this.logger.verbose('ExistFiles')
+        pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY, filesCount);
       }
 
-      //! adding filesCount in files (it needed for FileTypeValidator)
-      if (isArray(value)) {
-        value.forEach(v => v.filesCount = value.length);
+      if(isArray(metadata.metatype.fieldname)) {
+        return Promise.all(metadata.metatype.fieldname.map((key) => {
+          if((isArray(this.fileIsRequired) && this.fileIsRequired.includes(key)) || value[key]) {
+            this.logger.verbose(`Multi scenario: [${key}] start...`)
+            return pipe.transform(value?.[key])
+              .then((data) => ({[key]: data}))
+              .catch(this.createError(key))
+          }
+
+          return value
+        })).then((data) => {
+          let files = {}
+          data.forEach((value) => {
+            files = {...files, ...value}
+          })
+
+          return files;
+        })
+      } else {
+        this.logger.verbose(`Array or one scenario: [${metadata.metatype.fieldname}] start...`)
+        return pipe.transform(value).catch(this.createError(metadata.metatype.fieldname))
       }
     }
-
-    return pipe.transform(value).catch((error) => {
-      if(!error.response?.message.includes(PARSE_JSON)) {
-        const errorMessage = error.response?.error
-        error.response = {
-          [FIELD_NAME_FROM_REQ]: [
-            error.message
-          ]
-        }
-        error.message = errorMessage
-      }
-
-      throw error;
-    });
   }
 
-  private generatePipe(errorHttpStatusCode: ErrorHttpStatusCode): ParseFilePipe {
+  private createError(fieldname) {
+    return (error) => {
+      // console.log('FileValidationPipe: createError', error);
+      const errorMessage = error.response?.error;
+      error.response = {
+        [fieldname]: [
+          error.message,
+        ],
+      };
+      error.message = errorMessage;
+
+      throw error;
+    }
+  }
+
+  private generatePipe(errorHttpStatusCode: ErrorHttpStatusCode, filesCount?: number): ParseFilePipe {
+    const additionalOptions: Omit<ParseFileOptions, 'validators'> = {
+      errorHttpStatusCode,
+      fileIsRequired: Boolean(this.fileIsRequired),
+    };
+
     if (this.fileType) {
       return this.parseFilePipe
         .addValidator(
-          new UploadFileTypeValidator({ fileType: this.fileType }),
+          new UploadFileTypeValidator({ fileType: this.fileType, filesCount }),
         )
-        .build({
-          errorHttpStatusCode,
-          fileIsRequired: this.fileIsRequired,
-        });
+        .build(additionalOptions);
     }
 
-    return this.parseFilePipe
-      .build({
-        errorHttpStatusCode,
-        fileIsRequired: this.fileIsRequired,
-      });
+    return this.parseFilePipe.build(additionalOptions);
   }
 }

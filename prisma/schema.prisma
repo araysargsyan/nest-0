@@ -25,6 +25,8 @@ model User {
   hash     String
   hashedRt String?
 
+  products Product[] @relation("UserProducts")
+
   @@map("users")
 }
 
@@ -36,6 +38,9 @@ model Product {
   document  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  userId    Int
+  user      User     @relation("UserProducts", fields: [userId], references: [id])
 
   @@map("products")
 }

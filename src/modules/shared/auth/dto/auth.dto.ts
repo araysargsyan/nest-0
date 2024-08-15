@@ -1,5 +1,5 @@
 import { IsEmail, IsString } from 'class-validator';
-import { IsUniqueDecorator } from '~/decorators/is-unique.decorator';
+import { IsUnique } from '~/decorators/is-unique.decorator';
 
 class BaseAuthDto {
   @IsString()
@@ -12,11 +12,11 @@ export class SignInDto extends BaseAuthDto{
 }
 
 export class SignUpDto extends BaseAuthDto {
-  @IsUniqueDecorator('isEmailUnique')
+  @IsUnique('isEmailUnique')
   @IsEmail()
   email: string;
 
-  @IsUniqueDecorator('isEmailUnique')
+  @IsUnique('isEmailUnique')
   @IsString()
   name: string;
 

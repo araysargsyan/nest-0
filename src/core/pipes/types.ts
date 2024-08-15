@@ -14,7 +14,7 @@ export interface IArgumentMetadata extends NextArgumentMetadata {
 
 export interface IFileValidationPipeOptions {
   fileType?: string[],
-  fileIsRequired?: boolean
+  fileIsRequired?: boolean | NonEmptyArray<string>
 }
 
 export const FIELD_NAME_FROM_REQ = 'FIELD_NAME_FROM_REQ' as const;

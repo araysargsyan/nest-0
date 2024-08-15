@@ -6,59 +6,68 @@ import {
   Param,
   Patch,
   Post,
-  UploadedFile, UploadedFiles,
+  UploadedFile,
+  UploadedFiles,
   UseInterceptors,
+  UseGuards,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { CreateProductDocumentDto } from './dto/create-product-document.dto';
+import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 import { FileMixInterceptor } from '@core/interceptors/file-mix.interceptor';
-import { CreateProductDocumentDto } from '@modules/product/dto/create-product-document.dto';
+
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];
-
-
 @Controller('product')
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(private readonly productService: ProductService) {
+  }
 
   @Post()
+  // @UseGuards(JwtAccessAuthGuard)
   @UseInterceptors(
-    FileMixInterceptor(() => FilesInterceptor('images', 2, {
-      dest: 'public/uploads/products',
-      limits: {
-        // fileSize: 20,
-        files: 2,
+    FileMixInterceptor(
+      FilesInterceptor,
+      { name: 'images', maxCount: 2 },
+      {
+        dest: 'public/uploads/products',
+        limits: {
+          // fileSize: 20,
+          files: 2,
+        },
       },
-    })),
+    ),
   )
   create(
     @Body() createProductDto: CreateProductDto,
+    // @User('id') userId: number,
     @UploadedFiles(
       new FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
-        fileIsRequired: false
+        fileIsRequired: true,
       }),
     ) images?: Express.Multer.File[],
   ) {
-    console.log('CONTROLLER(product/create)');
+    console.log('CONTROLLER(product/create)', images);
     return this.productService.create({
       ...createProductDto,
-      images: images.map((img) => img.path)
+      userId: 1,
+      images: images.map((img) => img.path),
     });
   }
 
   @Patch('document')
   @UseInterceptors(
-    FileMixInterceptor(() => FileInterceptor('document', {
-      dest: 'public/uploads/products/documents',
-      limits: {
-        // fileSize: 20,
-        files: 1,
+    FileMixInterceptor(
+      FileInterceptor,
+      'document',
+      {
+        dest: 'public/uploads/products/documents',
       },
-    }))
+    ),
   )
   createDocument(
     @Body() { productId }: CreateProductDocumentDto,
@@ -69,7 +78,30 @@ export class ProductController {
     ) document: Express.Multer.File,
   ) {
     console.log('CONTROLLER(product/create/document)', document);
-    return this.productService.createDocument(document.path || document.filename, productId)
+    return this.productService.createDocument(document.path || document.filename, productId);
+  }
+
+  @Post('create-multi')
+  @UseInterceptors(
+    FileMixInterceptor(
+      FileFieldsInterceptor,
+      [
+        { name: 'multi1', maxCount: 2 },
+        { name: 'multi2', maxCount: 2 },
+      ],{
+        dest: 'public/uploads/products/multi'
+      }
+    ),
+  )
+  createMulti(
+    @UploadedFiles(
+      new FileValidationPipe({
+        fileType: VALID_UPLOADS_MIME_TYPES,
+        fileIsRequired: ['multi1'],
+      }),
+    ) files: Record<string, Express.Multer.File[]>,
+  ) {
+    console.log('CONTROLLER(product/create/multi)', files);
   }
 
   @Get()

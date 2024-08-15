@@ -1,20 +1,32 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../shared/prisma/prisma.service';
+import { CreateProductDto } from '@modules/product/dto/create-product.dto';
 
 @Injectable()
 export class ProductService {
   constructor(private readonly prisma: PrismaService) {
   }
 
-  create(createProductDto: Prisma.ProductCreateInput) {
-    return this.prisma.product.create({ data: createProductDto });
+  create(createProductDto: CreateProductDto) {
+    const { userId, ...data } = createProductDto;
+    return this.prisma.product.create({
+      data: {
+        ...data,
+        user: {
+          connect: {
+            id: userId
+          },
+        },
+      },
+      // include: {user: true}
+    });
   }
 
   createDocument(document: string, productId: number) {
     return this.prisma.product.update({
-      where: {id: productId},
-      data: {document}
+      where: { id: productId },
+      data: { document },
     });
   }
 

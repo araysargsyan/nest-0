@@ -45,7 +45,14 @@ export class UserService {
   }
 
   findMany(where: Prisma.UserWhereInput) {
-    return this.prismaService.user.findMany({ where })
+    return this.prismaService.user.findMany({
+      where,
+      include: {
+        products: {
+          select: {id: true}
+        },
+      }
+    })
   }
 
   findUnique(id: number, select: Prisma.UserSelect) {

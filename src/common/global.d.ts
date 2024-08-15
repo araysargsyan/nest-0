@@ -9,7 +9,7 @@ declare namespace Express {
 
   namespace Multer {
     interface File {
-      filesCount: number;
+      ext?: string;
     }
   }
 }
@@ -22,3 +22,5 @@ interface IConstructor<T> extends Function {
 interface IConstructorPrototype<T> {
   constructor: IConstructor<T>;
 }
+
+type NonEmptyArray<T> = [T, ...T[]];

@@ -3,7 +3,7 @@ import { UniqueConstraint } from '../constraints/unique.constraint';
 import { IValidationArguments } from '../types';
 
 
-export function IsUniqueDecorator(method: string, validationOptions?: ValidationOptions) {
+export function IsUnique(method: string, validationOptions?: ValidationOptions) {
   return function(object: IValidationArguments['object'], propertyName: string) {
     if (object.constructor.prototype.uniqueKeys === undefined) {
       object.constructor.prototype.uniqueKeys = {
