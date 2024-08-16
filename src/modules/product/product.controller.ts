@@ -17,7 +17,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductDocumentDto } from './dto/create-product-document.dto';
 import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
-import { FileMixInterceptor } from '@core/interceptors/file-mix.interceptor';
+import { EnhanceFileInterceptor } from '@core/interceptors/enhance-file.interceptor';
+import { User } from '~decorators/request-user.decorator';
 
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];
@@ -29,7 +30,7 @@ export class ProductController {
   @Post()
   // @UseGuards(JwtAccessAuthGuard)
   @UseInterceptors(
-    FileMixInterceptor(
+    EnhanceFileInterceptor(
       FilesInterceptor,
       { name: 'images', maxCount: 2 },
       {
@@ -43,7 +44,7 @@ export class ProductController {
   )
   create(
     @Body() createProductDto: CreateProductDto,
-    // @User('id') userId: number,
+    // @User('id') userId: string,
     @UploadedFiles(
       new FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
@@ -61,7 +62,7 @@ export class ProductController {
 
   @Patch('document')
   @UseInterceptors(
-    FileMixInterceptor(
+    EnhanceFileInterceptor(
       FileInterceptor,
       'document',
       {
@@ -83,7 +84,7 @@ export class ProductController {
 
   @Post('create-multi')
   @UseInterceptors(
-    FileMixInterceptor(
+    EnhanceFileInterceptor(
       FileFieldsInterceptor,
       [
         { name: 'multi1', maxCount: 2 },

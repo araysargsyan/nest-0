@@ -1,7 +1,6 @@
 import {
-  ArgumentMetadata,
   HttpStatus,
-  Injectable, Logger,
+  Injectable,
   ParseFilePipe,
   ParseFilePipeBuilder,
   PipeTransform,
@@ -11,6 +10,7 @@ import { FileValidationPipeAM, IFileValidationPipeOptions } from './types';
 import { UploadFileTypeValidator } from '~validator/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
 import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.interface';
+import { Logger } from '~logger/Logger';
 
 
 @Injectable()
@@ -39,7 +39,7 @@ export class FileValidationPipe implements PipeTransform {
 
     if (metadata.type === 'custom') {
       const filesCount = metadata.metatype.filesCount;
-      console.log('FileValidationPipe: INFO', {
+      this.logger.info({
         isMulti: isArray(metadata.metatype.fieldname),
         filesCount,
         value,
@@ -52,17 +52,17 @@ export class FileValidationPipe implements PipeTransform {
           || (isObject(value) && !Object.keys(value).length)
         ) && this.fileIsRequired
       ) {
-        this.logger.verbose('EmptyFiles');
+        this.logger.infoMessage('EmptyFiles');
         pipe = this.generatePipe(HttpStatus.BAD_REQUEST, filesCount);
       } else {
-        this.logger.verbose('ExistFiles')
+        this.logger.infoMessage('ExistFiles')
         pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY, filesCount);
       }
 
       if(isArray(metadata.metatype.fieldname)) {
         return Promise.all(metadata.metatype.fieldname.map((key) => {
           if((isArray(this.fileIsRequired) && this.fileIsRequired.includes(key)) || value[key]) {
-            this.logger.verbose(`Multi scenario: [${key}] start...`)
+            this.logger.infoMessage(`Multi scenario: [${key}] start...`)
             return pipe.transform(value?.[key])
               .then((data) => ({[key]: data}))
               .catch(this.createError(key))
@@ -78,7 +78,7 @@ export class FileValidationPipe implements PipeTransform {
           return files;
         })
       } else {
-        this.logger.verbose(`Array or one scenario: [${metadata.metatype.fieldname}] start...`)
+        this.logger.infoMessage(`Array or one scenario: [${metadata.metatype.fieldname}] start...`)
         return pipe.transform(value).catch(this.createError(metadata.metatype.fieldname))
       }
     }

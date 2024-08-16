@@ -13,5 +13,6 @@ export class CreateProductDto implements Omit<Prisma.ProductCreateInput, 'user'>
   @Exclude()
   images: string[]
 
+  @Exclude()
   userId: number
 }

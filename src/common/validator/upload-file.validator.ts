@@ -1,22 +1,10 @@
-import { FileValidator, Logger } from '@nestjs/common';
-import * as fileType from 'file-type-mime';
+import { FileValidator } from '@nestjs/common';
 import { promises, rename, unlink } from 'fs';
+import { Logger } from '~logger/Logger';
+// import * as fileType from 'file-type-mime';
 
-async function wait(seconds: number): Promise<void> {
-  try {
-    return await new Promise<void>((resolve) => {
-      console.log('waiting...........................', seconds);
-      setTimeout(resolve, seconds);
-    });
-  } finally {
-    console.log('after waiting...........................', seconds);
-  }
-}
+import { IUploadTypeValidatorOptions } from '../types';
 
-interface IUploadTypeValidatorOptions {
-  fileType: string[];
-  filesCount?: number;
-}
 
 export class UploadFileTypeValidator extends FileValidator {
   private readonly logger = new Logger('UploadFileTypeValidator');
@@ -35,12 +23,14 @@ export class UploadFileTypeValidator extends FileValidator {
     this.logger.debug('Start checking...')
     const isFileUploaded = Boolean(file.path);
     const data = isFileUploaded ? await promises.readFile(file.path) : file.buffer;
-    const response = fileType.parse(data);
+    // const response =await FileType.fromBuffer(data);
+    const response = await import('file-type')
+        .then((FileType) => FileType.fileTypeFromBuffer(data))  ;
     const hasError = !response || !this.validationOptions.fileType.includes(response.mime);
     this.validationOptions.filesCount && this.checkedFilesCount++;
 
-    this.logger.verbose('Finish checking.')
-    console.log('UploadFileTypeValidator: INFO', {
+    this.logger.infoMessage('Finish checking.')
+    this.logger.info( {
       hasError,
       file,
       response,
@@ -76,7 +66,7 @@ export class UploadFileTypeValidator extends FileValidator {
           () => {
             rename(oldPath, filePath, (err) => {
               if (!err) {
-                this.logger.debug(`Rename file ${oldPath} to ${filePath}`);
+                this.logger.verbose(`Rename file ${oldPath} to ${filePath}`);
               } else {
                 this.logger.error('Rename file', err);
               }
@@ -101,7 +91,7 @@ export class UploadFileTypeValidator extends FileValidator {
   }
 
   private cleanUp() {
-    this.logger.verbose('cleanUp......');
+    this.logger.infoMessage('cleanUp......');
     this.promises.forEach((cb, index) => {
       cb();
       if (index === this.promises.length - 1) {
@@ -116,7 +106,7 @@ export class UploadFileTypeValidator extends FileValidator {
   private removeFile(path: string) {
     unlink(path, (err) => {
       if (!err) {
-        this.logger.debug(`Remove file ${path}`);
+        this.logger.verbose(`Remove file ${path}`);
       } else {
         this.logger.error('Remove file', err);
       }

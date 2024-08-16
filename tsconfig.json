@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "NodeNext",
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
@@ -21,6 +21,20 @@
       "@*": ["./src/*"],
       "~*": ["./src/common/*"]
     },
+//    "include": ["src/**/*"],
+//    "exclude": ["node_modules", "dist"],
     "strict": true,
-  }
+    "resolveJsonModule": true,
+  },
+  "overrides": [
+    {
+      "compilerOptions": {
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext"
+      },
+      "include": [
+        "node_modules"
+      ]
+    }
+  ]
 }

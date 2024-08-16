@@ -2,7 +2,6 @@ import {
   CallHandler,
   ExecutionContext,
   Injectable,
-  Logger,
   mixin,
   NestInterceptor,
   Type,
@@ -12,10 +11,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { isArray, isObject } from 'class-validator';
 import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { MulterField, MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
-
+import { Logger } from '~logger/Logger';
 type TFileInterceptor = typeof FileInterceptor | typeof FilesInterceptor | typeof FileFieldsInterceptor;
 
-export function FileMixInterceptor<T extends TFileInterceptor = TFileInterceptor>(
+export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor>(
   fileInterceptor: T,
   field: T extends typeof FileInterceptor
     ? string
@@ -26,20 +25,23 @@ export function FileMixInterceptor<T extends TFileInterceptor = TFileInterceptor
 ): Type<NestInterceptor> {
   @Injectable()
   class MixinInterceptor implements NestInterceptor {
-    private logger = new Logger('FileMixInterceptor')
+    private logger = new Logger('EnhanceFileInterceptor')
 
     async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
-      const { interceptor, fieldNames } = this.getInterceptorAndFieldNames();
+      const {
+        interceptor,
+        fieldNames
+      } = this.getInterceptorAndFieldNames();
       this.logger.debug(`fieldNames: ${JSON.stringify(fieldNames, null, 2)}`);
 
       try {
         await new interceptor().intercept(context, next);
-        this.logger.verbose('SUCCESS');
+        this.logger.infoMessage('SUCCESS');
         this.generateFileNameIfNotExist(context, fieldNames)
 
         return next.handle();
       } catch (error: any) {
-        this.logger.verbose('ERROR');
+        this.logger.infoMessage('ERROR');
         const errorMessage = error.response?.error;
         error.response = {
           [this.getFieldNames(fieldNames) || 'file']: [

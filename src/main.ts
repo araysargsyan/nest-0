@@ -3,8 +3,8 @@ import { Logger } from '@nestjs/common';
 import { APP_PORT, APP_PREFIX } from '~constants/global.const';
 import { AppModule } from '@modules/app.module';
 import { ConfigService } from '@nestjs/config';
-import * as cookieParser from 'cookie-parser';
 import { useContainer } from 'class-validator';
+import cookieParser from 'cookie-parser';
 
 (async function start() {
   const app = await NestFactory.create(AppModule);

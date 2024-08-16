@@ -5,12 +5,16 @@ declare namespace Express {
     user?: ITokenPayload;
   }
 
-  namespace Multer {
-    interface File {
-      ext?: string;
-    }
+  declare module 'express-serve-static-core' {
+    interface Request extends Express.Request{}
   }
+  // namespace Multer {
+  //   interface File {
+  //     // ext?: string;
+  //   }
+  // }
 }
+
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 interface IConstructor<T> extends Function {
