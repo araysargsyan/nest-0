@@ -18,3 +18,6 @@ export interface IFileValidationPipeOptions {
   fileType?: string[],
   fileIsRequired?: boolean | NonEmptyArray<string>
 }
+
+export type TValue = Express.Multer.File | Express.Multer.File[] | Record<string, Express.Multer.File[]> | undefined
+

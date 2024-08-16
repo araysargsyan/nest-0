@@ -26,3 +26,4 @@ interface IConstructorPrototype<T> {
 }
 
 type NonEmptyArray<T> = [T, ...T[]];
+interface EmptyObject {}

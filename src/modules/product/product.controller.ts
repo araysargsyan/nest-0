@@ -35,10 +35,6 @@ export class ProductController {
       { name: 'images', maxCount: 2 },
       {
         dest: 'public/uploads/products',
-        limits: {
-          // fileSize: 20,
-          files: 2,
-        },
       },
     ),
   )
@@ -90,7 +86,8 @@ export class ProductController {
         { name: 'multi1', maxCount: 2 },
         { name: 'multi2', maxCount: 2 },
       ],{
-        dest: 'public/uploads/products/multi'
+        dest: 'public/uploads/products/multi',
+        errorFieldname: 'files'
       }
     ),
   )

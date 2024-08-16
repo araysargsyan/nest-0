@@ -12,8 +12,11 @@ import { isArray, isObject } from 'class-validator';
 import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { MulterField, MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { Logger } from '~logger/Logger';
-type TFileInterceptor = typeof FileInterceptor | typeof FilesInterceptor | typeof FileFieldsInterceptor;
 
+type TFileInterceptor = typeof FileInterceptor | typeof FilesInterceptor | typeof FileFieldsInterceptor;
+interface EnhanceMulterOptions extends MulterOptions {
+  errorFieldname?: string
+}
 export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor>(
   fileInterceptor: T,
   field: T extends typeof FileInterceptor
@@ -21,7 +24,9 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
     : T extends typeof FilesInterceptor
       ? MulterField
       : MulterField[],
-  localOptions: MulterOptions = {},
+  localOptions: T extends typeof FileFieldsInterceptor
+    ? EnhanceMulterOptions
+    : MulterOptions = {},
 ): Type<NestInterceptor> {
   @Injectable()
   class MixinInterceptor implements NestInterceptor {
@@ -44,7 +49,8 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         this.logger.infoMessage('ERROR');
         const errorMessage = error.response?.error;
         error.response = {
-          [this.getFieldNames(fieldNames) || 'file']: [
+          [(localOptions as EnhanceMulterOptions)?.errorFieldname
+          || this.getFieldNames(fieldNames)]: [
             error.message,
           ],
         };
@@ -55,7 +61,7 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
     }
 
     private getFieldNames(fieldNames: string | string[]) {
-      return isArray(fieldNames) ? 'MultiFile' : fieldNames
+      return (isArray(fieldNames) ? 'MultiFile' : fieldNames) || 'file'
     }
     private getInterceptorAndFieldNames() {
       let interceptor: Type<NestInterceptor>;
@@ -100,8 +106,15 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
             ...localOptions,
             limits: {
               ...localOptions.limits,
-              files: maxCount,
+              // files: maxCount,
             },
+            // fileFilter(
+            //   req: Request,
+            //   file: Express.Multer.File,
+            //   callback: FileFilterCallback,
+            // ): void {
+            //   console.log(file, 66);
+            // }
           },
         );
       }

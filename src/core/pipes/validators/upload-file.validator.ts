@@ -3,7 +3,7 @@ import { promises, rename, unlink } from 'fs';
 import { Logger } from '~logger/Logger';
 // import * as fileType from 'file-type-mime';
 
-import { IUploadTypeValidatorOptions } from '../types';
+import { IUploadTypeValidatorOptions } from '~types';
 
 
 export class UploadFileTypeValidator extends FileValidator {
@@ -12,21 +12,26 @@ export class UploadFileTypeValidator extends FileValidator {
   private stopUploading: boolean = false;
   private checkedFilesCount: number = 0;
   private promises = [];
+  public readonly isValid: FileValidator['isValid']
 
   constructor(
     protected readonly validationOptions: IUploadTypeValidatorOptions = { fileType: [] },
+    protected readonly hasError: boolean = false,
   ) {
-    super(validationOptions);
+    super(validationOptions)
+    this.isValid = (file?: Express.Multer.File) => {
+      return this.isValidFile(file, hasError)
+    }
   }
 
-  public async isValid(file?: Express.Multer.File): Promise<boolean> {
+  public async isValidFile(file: Express.Multer.File, hasErrorBefore: boolean): Promise<boolean> {
     this.logger.debug('Start checking...')
     const isFileUploaded = Boolean(file.path);
     const data = isFileUploaded ? await promises.readFile(file.path) : file.buffer;
     // const response =await FileType.fromBuffer(data);
     const response = await import('file-type')
         .then((FileType) => FileType.fileTypeFromBuffer(data))  ;
-    const hasError = !response || !this.validationOptions.fileType.includes(response.mime);
+    const hasError = !response || !this.validationOptions.fileType.includes(response.mime) || hasErrorBefore;
     this.validationOptions.filesCount && this.checkedFilesCount++;
 
     this.logger.infoMessage('Finish checking.')

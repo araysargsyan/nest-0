@@ -3,7 +3,7 @@ import { Request } from 'express';
 import { ITokenPayload } from '@modules/shared/auth';
 
 export const User = createParamDecorator((data: keyof ITokenPayload, ctx: ExecutionContext) => {
-    const request: Request = ctx.switchToHttp().getRequest();
+    const request = ctx.switchToHttp().getRequest<Request>();
 
     Logger.verbose(JSON.stringify(request.user), 'UserDecorator');
     // if (data) {

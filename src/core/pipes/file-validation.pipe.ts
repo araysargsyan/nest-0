@@ -1,13 +1,7 @@
-import {
-  HttpStatus,
-  Injectable,
-  ParseFilePipe,
-  ParseFilePipeBuilder,
-  PipeTransform,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, ParseFilePipe, ParseFilePipeBuilder, PipeTransform } from '@nestjs/common';
 import { isArray, isObject } from 'class-validator';
-import { FileValidationPipeAM, IFileValidationPipeOptions } from './types';
-import { UploadFileTypeValidator } from '~validator/upload-file.validator';
+import { FileValidationPipeAM, IFileValidationPipeOptions, TValue } from './types';
+import { UploadFileTypeValidator } from './validators/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
 import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.interface';
 import { Logger } from '~logger/Logger';
@@ -28,58 +22,57 @@ export class FileValidationPipe implements PipeTransform {
   }
 
   async transform(
-    value: Express.Multer.File | Express.Multer.File[] | Record<string, Express.Multer.File[]> | undefined,
+    value: TValue,
     metadata: FileValidationPipeAM,
   ) {
     this.logger.debug(`Start... \n ${JSON.stringify({
       fileIsRequired: this.fileIsRequired,
-      fileType: this.fileType, 
+      fileType: this.fileType,
     }, null, 2)}`);
     let pipe: ParseFilePipe;
 
     if (metadata.type === 'custom') {
       const filesCount = metadata.metatype.filesCount;
+      const isMulti = isArray(metadata.metatype.fieldname);
       this.logger.info({
-        isMulti: isArray(metadata.metatype.fieldname),
+        isMulti,
         filesCount,
         value,
-        metadata
+        metadata,
       });
 
-      if (
-        (!value
-          || (isArray(value) && !value.length)
-          || (isObject(value) && !Object.keys(value).length)
-        ) && this.fileIsRequired
-      ) {
+      if (!this.checkIfRequiredFieldExist(value, isMulti) && this.fileIsRequired) {
         this.logger.infoMessage('EmptyFiles');
         pipe = this.generatePipe(HttpStatus.BAD_REQUEST, filesCount);
       } else {
-        this.logger.infoMessage('ExistFiles')
+        this.logger.infoMessage('ExistFiles');
         pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY, filesCount);
       }
 
-      if(isArray(metadata.metatype.fieldname)) {
-        return Promise.all(metadata.metatype.fieldname.map((key) => {
-          if((isArray(this.fileIsRequired) && this.fileIsRequired.includes(key)) || value[key]) {
-            this.logger.infoMessage(`Multi scenario: [${key}] start...`)
+      if (isMulti) {
+        return Promise.all((metadata.metatype.fieldname as string[]).map((key) => {
+          if ((isArray(this.fileIsRequired)
+              ? this.fileIsRequired.includes(key)
+              : this.fileIsRequired
+          ) || value[key]) {
+            this.logger.infoMessage(`Multi scenario: [${key}] start...`);
             return pipe.transform(value?.[key])
-              .then((data) => ({[key]: data}))
-              .catch(this.createError(key))
+              .then((data) => ({ [key]: data }))
+              .catch(this.createError(key));
           }
 
-          return value
+          return value;
         })).then((data) => {
-          let files = {}
+          let files = {};
           data.forEach((value) => {
-            files = {...files, ...value}
-          })
+            files = { ...files, ...value };
+          });
 
           return files;
-        })
+        });
       } else {
-        this.logger.infoMessage(`Array or one scenario: [${metadata.metatype.fieldname}] start...`)
-        return pipe.transform(value).catch(this.createError(metadata.metatype.fieldname))
+        this.logger.infoMessage(`Array or one scenario: [${metadata.metatype.fieldname}] start...`);
+        return pipe.transform(value).catch(this.createError(metadata.metatype.fieldname));
       }
     }
   }
@@ -96,7 +89,26 @@ export class FileValidationPipe implements PipeTransform {
       error.message = errorMessage;
 
       throw error;
+    };
+  }
+
+  private checkIfRequiredFieldExist(value: TValue, isMulti: boolean) {
+    if ((!value
+      || (isArray(value) && !value.length)
+      || (isObject(value) && !Object.keys(value).length)
+    )) {
+      return false;
     }
+
+    if (isMulti && isArray(this.fileIsRequired)) {
+      for (const key of this.fileIsRequired) {
+        if (!value[key]) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   private generatePipe(errorHttpStatusCode: ErrorHttpStatusCode, filesCount?: number): ParseFilePipe {
@@ -108,7 +120,10 @@ export class FileValidationPipe implements PipeTransform {
     if (this.fileType) {
       return this.parseFilePipe
         .addValidator(
-          new UploadFileTypeValidator({ fileType: this.fileType, filesCount }),
+          new UploadFileTypeValidator(
+            { fileType: this.fileType, filesCount },
+            errorHttpStatusCode === HttpStatus.BAD_REQUEST,
+          ),
         )
         .build(additionalOptions);
     }
