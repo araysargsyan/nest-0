@@ -5,6 +5,7 @@ import { UploadFileTypeValidator } from './validators/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
 import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.interface';
 import { Logger } from '~logger/Logger';
+import { isUndefined } from '@nestjs/common/utils/shared.utils';
 
 
 @Injectable()
@@ -32,8 +33,9 @@ export class FileValidationPipe implements PipeTransform {
     let pipe: ParseFilePipe;
 
     if (metadata.type === 'custom') {
-      const filesCount = metadata.metatype.filesCount;
-      const isMulti = isArray(metadata.metatype.fieldname);
+      const isEnhanced = isUndefined(metadata.metatype.fieldname)
+      const filesCount = metadata.metatype.filesCount || (isArray(value) ? value.length : null);
+      const isMulti = isArray(metadata.metatype.fieldname) && isObject(value);
       this.logger.info({
         isMulti,
         filesCount,
@@ -43,10 +45,10 @@ export class FileValidationPipe implements PipeTransform {
 
       if (!this.checkIfRequiredFieldExist(value, isMulti) && this.fileIsRequired) {
         this.logger.infoMessage('EmptyFiles');
-        pipe = this.generatePipe(HttpStatus.BAD_REQUEST, filesCount);
+        pipe = this.generatePipe(HttpStatus.BAD_REQUEST, isEnhanced, filesCount);
       } else {
         this.logger.infoMessage('ExistFiles');
-        pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY, filesCount);
+        pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY, isEnhanced, filesCount);
       }
 
       if (isMulti) {
@@ -79,11 +81,18 @@ export class FileValidationPipe implements PipeTransform {
 
   private createError(fieldname) {
     return (error) => {
-      // console.log('FileValidationPipe: createError', error);
+      let erroredFieldname = ''
+      let errorResponseMessage = error.message
+      const regex = /\[\s*fieldname\s*:\s*(.*)\s*\]/;
+      const match = regex.exec(error.message)
+      if(match) {
+          errorResponseMessage = errorResponseMessage.split(match[0])[1].trim()
+          erroredFieldname = match[1].trim();
+      }
       const errorMessage = error.response?.error;
       error.response = {
-        [fieldname]: [
-          error.message,
+        [erroredFieldname || fieldname || 'files']: [
+          errorResponseMessage,
         ],
       };
       error.message = errorMessage;
@@ -111,7 +120,7 @@ export class FileValidationPipe implements PipeTransform {
     return true;
   }
 
-  private generatePipe(errorHttpStatusCode: ErrorHttpStatusCode, filesCount?: number): ParseFilePipe {
+  private generatePipe(errorHttpStatusCode: ErrorHttpStatusCode, hasFieldNames: boolean, filesCount?: number): ParseFilePipe {
     const additionalOptions: Omit<ParseFileOptions, 'validators'> = {
       errorHttpStatusCode,
       fileIsRequired: Boolean(this.fileIsRequired),
@@ -123,6 +132,7 @@ export class FileValidationPipe implements PipeTransform {
           new UploadFileTypeValidator(
             { fileType: this.fileType, filesCount },
             errorHttpStatusCode === HttpStatus.BAD_REQUEST,
+            hasFieldNames
           ),
         )
         .build(additionalOptions);

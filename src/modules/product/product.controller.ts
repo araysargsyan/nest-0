@@ -15,7 +15,12 @@ import { Prisma } from '@prisma/client';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductDocumentDto } from './dto/create-product-document.dto';
-import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import {
+  AnyFilesInterceptor,
+  FileFieldsInterceptor,
+  FileInterceptor,
+  FilesInterceptor,
+} from '@nestjs/platform-express';
 import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 import { EnhanceFileInterceptor } from '@core/interceptors/enhance-file.interceptor';
 import { User } from '~decorators/request-user.decorator';
@@ -100,6 +105,27 @@ export class ProductController {
     ) files: Record<string, Express.Multer.File[]>,
   ) {
     console.log('CONTROLLER(product/create/multi)', files);
+  }
+
+  @Post('any')
+  @UseInterceptors(
+    // EnhanceFileInterceptor(
+    //   AnyFilesInterceptor
+    // )
+    AnyFilesInterceptor({
+      // dest: 'public/uploads/products/any'
+    })
+  )
+  createAny(
+    @UploadedFiles(
+      new FileValidationPipe({
+      fileType: VALID_UPLOADS_MIME_TYPES,
+      fileIsRequired: true
+    })
+    ) files: any
+  ) {
+    console.log(files);
+    return files
   }
 
   @Get()

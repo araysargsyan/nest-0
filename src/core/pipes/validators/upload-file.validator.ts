@@ -16,6 +16,7 @@ export class UploadFileTypeValidator extends FileValidator {
 
   constructor(
     protected readonly validationOptions: IUploadTypeValidatorOptions = { fileType: [] },
+    protected readonly hasFieldNames: boolean,
     protected readonly hasError: boolean = false,
   ) {
     super(validationOptions)
@@ -119,6 +120,10 @@ export class UploadFileTypeValidator extends FileValidator {
   }
 
   public buildErrorMessage(file: Express.Multer.File): string {
+    if(!this.hasFieldNames) {
+      return `[fieldname: ${file.fieldname}] Upload only files of type: ${this.validationOptions.fileType.join(', ')}`
+    }
     return `Upload only files of type: ${this.validationOptions.fileType.join(', ')}`;
+
   }
 }
