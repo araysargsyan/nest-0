@@ -201,7 +201,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
         this.logger.error(`CATCHING ERROR ${JSON.stringify({ fieldname }, null, 2)}`);
         let erroredFieldname = '';
         let errorResponseMessage = error.message;
-        const regex = /\[\s*fieldname\s*:\s*(.*)\s*\]/;
+        const regex = /\[\s*fieldname\s*:\s*(.*)\s*]/;
         const match = regex.exec(error.message);
         if (match) {
           errorResponseMessage = errorResponseMessage.split(match[0])[1].trim();
