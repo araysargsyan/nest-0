@@ -8,10 +8,10 @@ export interface IArgumentMetadataGP extends ArgumentMetadata {
     uniqueKeys?: Record<string, null | 'pending' | boolean>;
   };
 }
-export interface FileValidationPipeAM extends ArgumentMetadata {
+export interface IFileValidationPipeAM extends ArgumentMetadata {
   metatype?: ArgumentMetadata['metatype'] & {
-    filesCount?: number,
-    fieldname?: string | string[]
+    isMulti?: boolean,
+    fieldname?: string,
   };
 }
 export interface IFileValidationPipeOptions {

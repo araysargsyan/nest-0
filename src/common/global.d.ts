@@ -8,11 +8,11 @@ declare namespace Express {
   declare module 'express-serve-static-core' {
     interface Request extends Express.Request{}
   }
-  // namespace Multer {
-  //   interface File {
-  //     // ext?: string;
-  //   }
-  // }
+  namespace Multer {
+    interface File {
+      ext?: string;
+    }
+  }
 }
 
 

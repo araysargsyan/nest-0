@@ -9,48 +9,89 @@ import {
 import { Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import { isArray, isObject } from 'class-validator';
-import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import {
+  AnyFilesInterceptor,
+  FileFieldsInterceptor,
+  FileInterceptor,
+  FilesInterceptor,
+} from '@nestjs/platform-express';
 import { MulterField, MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { Logger } from '~logger/Logger';
 
-type TFileInterceptor = typeof FileInterceptor | typeof FilesInterceptor | typeof FileFieldsInterceptor;
-interface EnhanceMulterOptions extends MulterOptions {
-  errorFieldname?: string
-}
-export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor>(
-  fileInterceptor: T,
+type TFileInterceptor =
+  typeof FileInterceptor
+  | typeof FilesInterceptor
+  | typeof FileFieldsInterceptor
+  | typeof AnyFilesInterceptor
+
+interface EnhanceMulterOptions<T extends TFileInterceptor = TFileInterceptor> extends MulterOptions {
   field: T extends typeof FileInterceptor
     ? string
     : T extends typeof FilesInterceptor
       ? MulterField
-      : MulterField[],
-  localOptions: T extends typeof FileFieldsInterceptor
-    ? EnhanceMulterOptions
-    : MulterOptions = {},
+      : T extends typeof FileFieldsInterceptor
+        ? MulterField[]
+        : null,
+}
+
+type TEnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor> = T extends typeof AnyFilesInterceptor
+  ? {
+    (
+      fileInterceptor: T,
+      options?: MulterOptions & { errorFieldname?: string },
+    ): Type<NestInterceptor>;
+  }
+  : {
+    (
+      fileInterceptor: T,
+      options: T extends typeof FileFieldsInterceptor
+        ? EnhanceMulterOptions<T> & { errorFieldname?: string }
+        : EnhanceMulterOptions<T>,
+    ): Type<NestInterceptor>;
+  }
+
+//* generating unique filename field into each file object when dest=undefined
+//* handling multer errors
+//* passing metadata into file or files object(for file-validation.pipe)
+export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor>(
+  ...[fileInterceptor, options = {
+    field: null
+  }]: Parameters<TEnhanceFileInterceptor<T>>
 ): Type<NestInterceptor> {
   @Injectable()
   class MixinInterceptor implements NestInterceptor {
-    private logger = new Logger('EnhanceFileInterceptor')
+    private logger = new Logger('EnhanceFileInterceptor');
+    private readonly nestedKeyRegex: RegExp = /\[([^\]]+)]/g;
 
     async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
       const {
+        errorFieldname,
+        field,
+        ...localOptions
+      } = options as EnhanceMulterOptions<T> & { errorFieldname?: string };
+      // const match = this.nestedKeyRegex.exec((field as any).name);
+      // console.log(match, this.nestedKeyRegex.exec((field as any).name));
+      // console.log({ maxCount: +match[1], names: (field as any).name.split(match[0]) }, 777);
+      const {
         interceptor,
-        fieldNames
-      } = this.getInterceptorAndFieldNames();
-      this.logger.debug(`fieldNames: ${JSON.stringify(fieldNames, null, 2)}`);
+        fieldname
+      } = this.getInterceptorAndFieldNames(field, localOptions);
+
+      // this.logger.debug(`fieldNames: ${JSON.stringify(fieldNames, null, 2)}`);
+      this.logger.debug(`fieldNames: ${JSON.stringify(field, null, 2)}`);
 
       try {
         await new interceptor().intercept(context, next);
         this.logger.infoMessage('SUCCESS');
-        this.generateFileNameIfNotExist(context, fieldNames)
+        this.generateFileNameIfNotExist( context, fieldname);
 
         return next.handle();
       } catch (error: any) {
         this.logger.infoMessage('ERROR');
         const errorMessage = error.response?.error;
         error.response = {
-          [(localOptions as EnhanceMulterOptions)?.errorFieldname
-          || this.getFieldNames(fieldNames)]: [
+          [errorFieldname
+          || this.getFieldNames(field)]: [
             error.message,
           ],
         };
@@ -60,15 +101,21 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
       }
     }
 
-    private getFieldNames(fieldNames: string | string[]) {
-      return (isArray(fieldNames) ? 'MultiFile' : fieldNames) || 'file'
+    private getFieldNames(fieldNames: string | MulterField | MulterField[]/*string | string[]*/) {
+      return (isArray(fieldNames)
+          ? 'MultiFile'
+          : isObject(fieldNames)
+            ? fieldNames.name
+            : fieldNames
+      ) || 'file';
     }
-    private getInterceptorAndFieldNames() {
+
+    private getInterceptorAndFieldNames(field: EnhanceMulterOptions['field'], localOptions: MulterOptions) {
       let interceptor: Type<NestInterceptor>;
-      let fieldNames: string | string[];
+      let fieldname: string | null = null;
 
       if (fileInterceptor.name === 'FileInterceptor') {
-        fieldNames = field as string;
+        fieldname = field as string;
         interceptor = (fileInterceptor as typeof FileInterceptor)(
           field as string,
           {
@@ -81,7 +128,7 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         );
       } else if (fileInterceptor.name === 'FilesInterceptor') {
         const { name, maxCount = 1 } = (field as MulterField);
-        fieldNames = name;
+        fieldname = name;
         interceptor = (fileInterceptor as typeof FilesInterceptor)(
           name,
           maxCount,
@@ -94,47 +141,34 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
           },
         );
       } else if (fileInterceptor.name === 'FileFieldsInterceptor') {
-        let maxCount = 0
-        fieldNames = (field as MulterField[]).map((field) => {
-          maxCount = maxCount + field.maxCount
-          return field.name
-        });
-
         interceptor = (fileInterceptor as typeof FileFieldsInterceptor)(
           field as MulterField[],
           {
             ...localOptions,
             limits: {
               ...localOptions.limits,
-              // files: maxCount,
+              //? files: what?
             },
-            // fileFilter(
-            //   req: Request,
-            //   file: Express.Multer.File,
-            //   callback: FileFilterCallback,
-            // ): void {
-            //   console.log(file, 66);
-            // }
           },
         );
+      } else if (fileInterceptor.name === 'AnyFilesInterceptor') {
+        interceptor = (fileInterceptor as typeof AnyFilesInterceptor)(localOptions);
       }
 
       return {
         interceptor,
-        fieldNames,
+        fieldname,
       };
     }
-    private generateFileNameIfNotExist(context: ExecutionContext, fieldName: string | string[]) {
+
+    private generateFileNameIfNotExist(context: ExecutionContext, fieldname: string | null) {
       const req = context.switchToHttp().getRequest();
-      let filesCount = 0
 
       if (req.file && !req.file.filename) {
         req.file.filename = uuidv4();
-        filesCount = 1
       }
       if (req.files) {
-        if(isArray(req.files)) {
-          filesCount = req.files.length
+        if (isArray(req.files)) {
           req.files.forEach((file: Express.Multer.File) => {
             if (!file.filename) {
               file.filename = uuidv4();
@@ -142,33 +176,30 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
           });
         } else if (isObject(req.files)) {
           Object.keys(req.files).forEach((key) => {
-            filesCount = filesCount + req.files[key].length
             req.files[key].forEach((file: Express.Multer.File) => {
               if (!file.filename) {
                 file.filename = uuidv4();
               }
             });
-          })
+          });
         }
       }
 
       if (fileInterceptor.name === 'FileInterceptor') {
         if (!req.file) {
-          req.file = {}
+          req.file = {};
         }
-        req.file.constructor.fieldname = fieldName
-        req.file.constructor.filesCount = filesCount
+        req.file.constructor.fieldname = fieldname
       }
 
       if (fileInterceptor.name === 'FilesInterceptor' && req.files) {
-        req.files.constructor.fieldname = fieldName
-        req.files.constructor.filesCount = filesCount
+        req.files.constructor.fieldname = fieldname
       }
 
       if (fileInterceptor.name === 'FileFieldsInterceptor'/* && req.files*/) {
-        req.files = {...req.files}
-        req.files.constructor.fieldname = fieldName
-        req.files.constructor.filesCount = filesCount
+        req.files = { ...req.files };
+        req.files.constructor.isMulti = true
+        // req.files.constructor.fieldname = fieldName
       }
     }
   }

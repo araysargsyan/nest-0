@@ -1,10 +1,11 @@
-import { BadRequestException, Inject, Injectable, Logger, PipeTransform, Scope, ValidationError } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, PipeTransform, Scope, ValidationError } from '@nestjs/common';
 import { validate, ValidatorOptions } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { IArgumentMetadataGP } from './types';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { TUniqueKeys } from '~types';
+import { Logger } from '~logger/Logger';
 
 @Injectable({scope: Scope.REQUEST})
 export class GlobalValidationPipe implements PipeTransform {
@@ -43,6 +44,10 @@ export class GlobalValidationPipe implements PipeTransform {
     this.logger.debug(`FINISH -> ${JSON.stringify({instance, errors}, null, 2)}`)
 
     if (errors) {
+      this.logger.infoMessage('BODY WAS ERRORED')
+      this.request.body = {...this.request.body}
+      this.request.body.constructor.prototype._errored = true;
+      this.logger.info(new BadRequestException(errors))
       throw new BadRequestException(errors);
     }
 

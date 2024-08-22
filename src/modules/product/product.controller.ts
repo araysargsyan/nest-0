@@ -9,7 +9,10 @@ import {
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
-  UseGuards,
+  // UseGuards,
+  Injectable,
+  PipeTransform,
+  Inject,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ProductService } from './product.service';
@@ -23,10 +26,41 @@ import {
 } from '@nestjs/platform-express';
 import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 import { EnhanceFileInterceptor } from '@core/interceptors/enhance-file.interceptor';
-import { User } from '~decorators/request-user.decorator';
+// import { User } from '~decorators/request-user.decorator';
+import { REQUEST } from '@nestjs/core';
 
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];
+
+
+@Injectable()
+export class MargeFilesToBodyPipe implements PipeTransform {
+  // private logger = new Logger('FileValidationPipe');
+
+  constructor(
+    @Inject(REQUEST) readonly request: Request
+  ) {}
+
+  async transform(
+    value: any,
+    metadata: any,
+  ) {
+    console.log(`MargeFilesToBodyPipe$$ ${JSON.stringify({
+      value,
+      metadata,
+      body: this.request.body
+    }, null, 2)}`);
+
+
+    return {
+      ...this.request.body,
+      files: value
+    }
+  }
+
+}
+
+
 @Controller('product')
 export class ProductController {
   constructor(private readonly productService: ProductService) {
@@ -37,44 +71,47 @@ export class ProductController {
   @UseInterceptors(
     EnhanceFileInterceptor(
       FilesInterceptor,
-      { name: 'images', maxCount: 2 },
       {
+        field: { name: 'images', maxCount: 200 },
         dest: 'public/uploads/products',
       },
     ),
   )
-  create(
+  async create(
     @Body() createProductDto: CreateProductDto,
     // @User('id') userId: string,
     @UploadedFiles(
-      new FileValidationPipe({
+      FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
         fileIsRequired: true,
       }),
+      // MargeFilesToBodyPipe
     ) images?: Express.Multer.File[],
   ) {
-    console.log('CONTROLLER(product/create)', images);
-    return this.productService.create({
-      ...createProductDto,
-      userId: 1,
-      images: images.map((img) => img.path),
-    });
+    console.log('CONTROLLER(product/create)', { images });
+    // return this.productService.create({
+    //   ...createProductDto,
+    //   userId: 1,
+    //   images: images.map((img) => img.path),
+    // });
   }
 
   @Patch('document')
   @UseInterceptors(
+    // FileInterceptor('document'),
     EnhanceFileInterceptor(
       FileInterceptor,
-      'document',
       {
+        field: 'document',
         dest: 'public/uploads/products/documents',
+        // limits: {}
       },
     ),
   )
   createDocument(
     @Body() { productId }: CreateProductDocumentDto,
     @UploadedFile(
-      new FileValidationPipe({
+      FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
       }),
     ) document: Express.Multer.File,
@@ -87,10 +124,11 @@ export class ProductController {
   @UseInterceptors(
     EnhanceFileInterceptor(
       FileFieldsInterceptor,
-      [
-        { name: 'multi1', maxCount: 2 },
-        { name: 'multi2', maxCount: 2 },
-      ],{
+      {
+        field: [
+          { name: 'multi1', maxCount: 2 },
+          { name: 'multi2', maxCount: 2 },
+        ],
         dest: 'public/uploads/products/multi',
         errorFieldname: 'files'
       }
@@ -98,34 +136,59 @@ export class ProductController {
   )
   createMulti(
     @UploadedFiles(
-      new FileValidationPipe({
+      FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
         fileIsRequired: ['multi1'],
       }),
     ) files: Record<string, Express.Multer.File[]>,
   ) {
     console.log('CONTROLLER(product/create/multi)', files);
+    return files
   }
 
   @Post('any')
   @UseInterceptors(
-    // EnhanceFileInterceptor(
-    //   AnyFilesInterceptor
-    // )
-    AnyFilesInterceptor({
-      // dest: 'public/uploads/products/any'
-    })
+    EnhanceFileInterceptor(
+      AnyFilesInterceptor,
+      {
+        limits: {
+          files: 6,
+        },
+        dest: 'public/uploads/products/any',
+        errorFieldname: 'anyfiles'
+      }
+    )
   )
   createAny(
     @UploadedFiles(
-      new FileValidationPipe({
-      fileType: VALID_UPLOADS_MIME_TYPES,
-      fileIsRequired: true
-    })
-    ) files: any
+      FileValidationPipe({
+        fileType: VALID_UPLOADS_MIME_TYPES,
+        fileIsRequired: true,
+      }),
+    ) files: any,
+    @Body() body: any
   ) {
-    console.log(files);
-    return files
+    console.log({ files, body });
+    return files;
+  }
+
+  @Post('nested')
+  @UseInterceptors(
+    EnhanceFileInterceptor(
+      FilesInterceptor,
+      {
+        field: {
+          name: 'images[4]',
+          maxCount: 2,
+        },
+        dest: 'public/uploads/products',
+      },
+    ),
+  )
+  createNestedFiles(
+
+  ) {
+
   }
 
   @Get()

@@ -3,9 +3,12 @@ import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { resolve } from 'path';
 import { PUBLIC_FOLDER } from '~constants/global.const';
+import { Logger } from '~logger/Logger';
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
+  private logger = new Logger('HttpExceptionFilter');
+
   constructor(private readonly configService: ConfigService) {
   }
 
@@ -16,7 +19,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = exception.getStatus();
     const errorResponse: any = exception.getResponse();
 
-    console.log('HttpExceptionFilter', { exception, status, errorResponse});
+    this.logger.error(JSON.stringify({ exception, status, errorResponse}, null, 2));
 
     if (status === HttpStatus.NOT_FOUND) {
       response.sendFile(resolve(this.configService.get(PUBLIC_FOLDER)));
@@ -25,16 +28,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message: exception.message,
         errors: errorResponse,
       }
-
-      // if (exception.message.includes('PARSE_JSON')) {
-      //   messageAndStatus.message = errorResponse.error
-      //   const {PARSE_JSON, ...errors} = JSON.parse(exception.message)
-      //   messageAndStatus.errors = errors
-      // } else if (Object.keys(errorResponse).includes(FIELD_NAME_FROM_REQ)) {
-      //   messageAndStatus.errors[request[FIELD_NAME_FROM_REQ]] = messageAndStatus.errors[FIELD_NAME_FROM_REQ]
-      //   delete messageAndStatus.errors[FIELD_NAME_FROM_REQ]
-      //   delete request[FIELD_NAME_FROM_REQ]
-      // }
 
       response.status(status).json({
         timestamp: new Date().toISOString(),
