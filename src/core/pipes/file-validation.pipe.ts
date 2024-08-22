@@ -100,7 +100,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
               checkedChunksCount++
               if (checkedChunksCount === Object.keys(value).length) {
                 this.logger.infoMessage(`[MULTI SCENARIO]: FINISH. {hasError=${hasError}, key=${key}}`);
-                if (hasError) {
+                if (hasError || Boolean(this.request.body._errored)) {
                   Promise.all(Object.values(value)
                     .flat(Infinity)
                     .map(val => this.removeFile(val.path)),
