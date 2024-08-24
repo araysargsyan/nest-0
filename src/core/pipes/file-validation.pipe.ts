@@ -17,6 +17,7 @@ import { Logger } from '~logger/Logger';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { unlink, rename } from 'fs';
+import { BODY_ERRORED, FILE_METADATA } from '~constants/core.const';
 
 
 export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: IFileValidationPipeOptions) => {
@@ -36,18 +37,24 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     async transform(
-      value: TTypeWithConstructor<TValue, { isMulti?: boolean, fieldname?: string }>,
+      value: TValue,
       metadata: ArgumentMetadata,
     ) {
+      const fileMetadata: undefined | {
+        isMulti?: boolean;
+        fieldname?: string;
+      } = Reflect.getMetadata(FILE_METADATA, this.request.route)
+      Reflect.defineMetadata(FILE_METADATA, fileMetadata, metadata.metatype)
       this.logger.debug(`Start... \n ${JSON.stringify({
         fileIsRequired: this.fileIsRequired,
         fileType: this.fileType,
+        fileMetadata
       }, null, 2)}`);
       let pipe: ParseFilePipe;
 
       if (metadata.type === 'custom') {
-        const isMulti = value?.constructor?.isMulti || this.isMulti(value);
-        const fieldname = value?.constructor?.fieldname || 'files';
+        const isMulti = /*value?.constructor?.isMulti */ fileMetadata?.isMulti || this.isMulti(value);
+        const fieldname = /*value?.constructor?.fieldname */fileMetadata?.fieldname || 'files';
         const missingRequiredField = this.getMissingRequiredField(value, isMulti, fieldname);
         this.logger.info({
           missingRequiredField,
@@ -71,7 +78,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
             .catch(this.createError(missingRequiredField))
             .finally(() => {
               if (isMulti) {
-                this.isBodyErrored()
+                this.checkBodyError(metadata.metatype);
                 this.removeFiles(Object.values(value).flat(Infinity));
               }
             });
@@ -100,7 +107,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
               checkedChunksCount++;
               if (checkedChunksCount === Object.keys(value).length) {
                 this.logger.infoMessage(`[MULTI SCENARIO]: FINISH. {hasError=${hasError}, key=${key}}`);
-                const isBodyErrored = this.isBodyErrored()
+                const isBodyErrored = this.checkBodyError(metadata.metatype);
                 if (hasError || isBodyErrored) {
                   this.removeFiles(Object.values(value).flat(Infinity));
                 } else {
@@ -128,7 +135,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
           hasError = true;
           return this.createError(fieldname)(error);
         }).finally(() => {
-          const isBodyErrored = this.isBodyErrored()
+          const isBodyErrored = this.checkBodyError(metadata.metatype);
 
           if (hasError || isBodyErrored) {
             if (isArray(value)) {
@@ -148,6 +155,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     public renameFiles(files: Express.Multer.File | Express.Multer.File[]) {
+      Reflect.deleteMetadata(FILE_METADATA, this.request.route)
       if (isArray(files)) {
         return Promise.all(files.map(file => {
           const oldPath = file.path;
@@ -163,6 +171,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     public removeFiles(files: Express.Multer.File | Express.Multer.File[]) {
+      Reflect.deleteMetadata(FILE_METADATA, this.request.route)
       if (isArray(files)) {
         return Promise.all(files.map(file => this.removeFile(file.path)));
       }
@@ -170,14 +179,14 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       return this.removeFile(files.path);
     }
 
-    public isBodyErrored() {
-      const isBodyErrored = Boolean(this.request.body._errored)
-      this.logger.infoMessage(`isBodyErrored=${isBodyErrored}`)
+    public checkBodyError(metatype: ArgumentMetadata['metatype']) {
+      const isBodyErrored = Boolean(Reflect.getMetadata(BODY_ERRORED, metatype));
+      this.logger.infoMessage(`isBodyErrored=${isBodyErrored}`);
       if (isBodyErrored) {
-        delete this.request.body.constructor.prototype._errored
+        Reflect.deleteMetadata(BODY_ERRORED, metatype)
       }
 
-      return isBodyErrored
+      return isBodyErrored;
     }
 
     public removeFile(path: string) {

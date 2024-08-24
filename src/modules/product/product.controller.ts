@@ -54,7 +54,7 @@ export class ProductController {
         fileIsRequired: true,
       }),
       MargeFilesToBodyPipe('path')
-    ) bodyWithImages: CreateProductDto,
+    ) bodyWithImages: any,
   ) {
     console.log('CONTROLLER(product/create)', { bodyWithImages });
     return this.productService.create(bodyWithImages, /*userId ||*/ 1);
@@ -78,7 +78,7 @@ export class ProductController {
       }),
     ) document: Express.Multer.File,
   ) {
-    console.log('CONTROLLER(product/create/document)', document);
+    console.log('CONTROLLER(product/create/document)', document, productId);
     return this.productService.createDocument(document.path || document.filename, productId);
   }
 

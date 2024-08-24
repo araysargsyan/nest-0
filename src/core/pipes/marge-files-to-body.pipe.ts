@@ -2,11 +2,13 @@ import { Inject, Injectable, mixin, PipeTransform } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { isArray } from 'class-validator';
+import { FILE_METADATA } from '~constants/core.const';
+import { Logger } from '~logger/Logger';
 
 export function MargeFilesToBodyPipe(includingKeys: string | string[] = '', key?: string) {
   @Injectable()
   class Pipe implements PipeTransform {
-    // private logger = new Logger('FileValidationPipe');
+    public logger = new Logger('FileValidationPipe');
 
     constructor(
       @Inject(REQUEST) readonly request: Request
@@ -16,11 +18,19 @@ export function MargeFilesToBodyPipe(includingKeys: string | string[] = '', key?
       value: any,
       metadata: any,
     ) {
-      console.log('MargeFilesToBodyPipe$$', {
+      this.logger.verbose('START')
+      const fileMetadata: undefined | {
+        isMulti?: boolean;
+        fieldname?: string;
+      } = Reflect.getMetadata(FILE_METADATA, metadata.metatype)
+      Reflect.deleteMetadata(FILE_METADATA, metadata.metatype)
+      this.logger.info({
         value,
         metadata,
         body: this.request.body,
-        files: this.request.files,
+        fileMetadata,
+        includingKeys,
+        key
       });
 
       let files = value
@@ -45,7 +55,7 @@ export function MargeFilesToBodyPipe(includingKeys: string | string[] = '', key?
 
       return {
         ...this.request.body,
-        [value.constructor.fieldname || key || 'files']: files
+        [fileMetadata?.fieldname || key || 'files']: files
       }
     }
 

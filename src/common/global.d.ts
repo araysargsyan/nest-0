@@ -25,10 +25,10 @@ interface IConstructorPrototype<T> {
   constructor: IConstructor<T>;
 }
 
-type TTypeWithConstructor<T, C> = T & {
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  constructor: Function & C;
-}
+// type TTypeWithConstructor<T, C> = T & {
+//   // eslint-disable-next-line @typescript-eslint/ban-types
+//   constructor: Function & C;
+// }
 
 type NonEmptyArray<T> = [T, ...T[]];
 interface EmptyObject {}

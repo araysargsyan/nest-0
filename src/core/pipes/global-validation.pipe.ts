@@ -1,4 +1,5 @@
 import {
+  ArgumentMetadata,
   BadRequestException,
   Inject,
   Injectable,
@@ -14,6 +15,7 @@ import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { TUniqueKeys } from '~types';
 import { Logger } from '~logger/Logger';
+import { BODY_ERRORED } from '~constants/core.const';
 
 @Injectable({ scope: Scope.REQUEST })
 export class GlobalValidationPipe implements PipeTransform {
@@ -26,6 +28,7 @@ export class GlobalValidationPipe implements PipeTransform {
     forbidNonWhitelisted: true,
     forbidUnknownValues: true,
   };
+  fileMetatype: ArgumentMetadata['metatype']
 
   constructor(
     @Inject(REQUEST) protected readonly request: Request,
@@ -36,6 +39,10 @@ export class GlobalValidationPipe implements PipeTransform {
     const skipValidation = metadata.type === 'custom'
       || extraValidationOptions === null
       || this.isNotDto(metadata.metatype?.name);
+
+    if(metadata.type === 'custom') {
+      this.fileMetatype = metadata.metatype
+    }
 
     if (skipValidation) {
       this.logger.debug(`Skip ${metadata.type}`);
@@ -59,11 +66,16 @@ export class GlobalValidationPipe implements PipeTransform {
         throw new BadRequestException(errors);
       }
 
+      delete this.fileMetatype
       this.request.body = { ...instance };
       return instance;
     } catch (error) {
-      this.request.body = { ...this.request.body };
-      this.request.body.constructor.prototype._errored = true;
+      // this.request.body = { ...this.request.body };
+      // this.request.body.constructor.prototype._errored = true;
+      if(this.fileMetatype) {
+        Reflect.defineMetadata(BODY_ERRORED, true, this.fileMetatype)
+        delete this.fileMetatype
+      }
 
       if (error instanceof BadRequestException) {
         throw error;

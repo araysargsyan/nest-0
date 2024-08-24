@@ -17,6 +17,7 @@ import {
 } from '@nestjs/platform-express';
 import { MulterField, MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { Logger } from '~logger/Logger';
+import { FILE_METADATA } from '~constants/core.const';
 
 type TFileInterceptor =
   typeof FileInterceptor
@@ -73,9 +74,8 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         interceptor,
         fieldname,
       } = this.getInterceptorAndFieldNames(field, localOptions);
+      this.logger.debug(`fieldNames: ${JSON.stringify({field, fieldname}, null, 2)}`);
       // const match = this.nestedKeyRegex.exec((field as any).name);
-
-      this.logger.debug(`fieldNames: ${JSON.stringify({ field, fieldname}, null, 2)}`);
 
       try {
         await new interceptor().intercept(context, next);
@@ -149,21 +149,21 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
     }
 
     private generateFileNameIfNotExist(context: ExecutionContext, fieldname: string | null) {
-      const req = context.switchToHttp().getRequest();
+      const request = context.switchToHttp().getRequest();
 
-      if (req.file && !req.file.filename) {
-        req.file.filename = uuidv4();
+      if (request.file && !request.file.filename) {
+        request.file.filename = uuidv4();
       }
-      if (req.files) {
-        if (isArray(req.files)) {
-          req.files.forEach((file: Express.Multer.File) => {
+      if (request.files) {
+        if (isArray(request.files)) {
+          request.files.forEach((file: Express.Multer.File) => {
             if (!file.filename) {
               file.filename = uuidv4();
             }
           });
-        } else if (isObject(req.files)) {
-          Object.keys(req.files).forEach((key) => {
-            req.files[key].forEach((file: Express.Multer.File) => {
+        } else if (isObject(request.files)) {
+          Object.keys(request.files).forEach((key) => {
+            request.files[key].forEach((file: Express.Multer.File) => {
               if (!file.filename) {
                 file.filename = uuidv4();
               }
@@ -173,22 +173,27 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
       }
 
       if (fileInterceptor.name === 'FileInterceptor') {
-        if (!req.file) {
-          req.file = {};
-        }
-        req.file.constructor.fieldname = fieldname;
+        // if (!request.file) {
+        //   request.file = {};
+        // }
+        // request.file.constructor.fieldname = fieldname;
+
+        Reflect.defineMetadata(FILE_METADATA, { fieldname }, request.route)
       }
 
       if (fileInterceptor.name === 'FilesInterceptor') {
-        if (!req.files.length) {
-          req.files = [];
-        }
-        req.files.constructor.fieldname = fieldname;
+        // if (!request.files.length) {
+        //   request.files = [];
+        // }
+        // request.files.constructor.fieldname = fieldname;
+        Reflect.defineMetadata(FILE_METADATA, { fieldname }, request.route)
+
       }
 
-      if (fileInterceptor.name === 'FileFieldsInterceptor'/* && req.files*/) {
-        req.files = { ...req.files };
-        req.files.constructor.isMulti = true;
+      if (fileInterceptor.name === 'FileFieldsInterceptor'/* && request.files*/) {
+        // request.files = { ...request.files };
+        // request.files.constructor.isMulti = true;
+        Reflect.defineMetadata(FILE_METADATA, { isMulti: true }, request.route)
       }
     }
   }
