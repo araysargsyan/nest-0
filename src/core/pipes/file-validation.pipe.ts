@@ -71,6 +71,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
             .catch(this.createError(missingRequiredField))
             .finally(() => {
               if (isMulti) {
+                this.isBodyErrored()
                 this.removeFiles(Object.values(value).flat(Infinity));
               }
             });
@@ -99,11 +100,8 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
               checkedChunksCount++;
               if (checkedChunksCount === Object.keys(value).length) {
                 this.logger.infoMessage(`[MULTI SCENARIO]: FINISH. {hasError=${hasError}, key=${key}}`);
-                const hasBodyError = Boolean(this.request.body._errored)
-                if (hasBodyError) {
-                  delete this.request.body.constructor.prototype._errored
-                }
-                if (hasError || hasBodyError) {
+                const isBodyErrored = this.isBodyErrored()
+                if (hasError || isBodyErrored) {
                   this.removeFiles(Object.values(value).flat(Infinity));
                 } else {
                   this.renameFiles(Object.values(value).flat(Infinity));
@@ -130,12 +128,9 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
           hasError = true;
           return this.createError(fieldname)(error);
         }).finally(() => {
-          const hasBodyError = Boolean(this.request.body._errored)
-          if (hasBodyError) {
-            delete this.request.body.constructor.prototype._errored
-          }
+          const isBodyErrored = this.isBodyErrored()
 
-          if (hasError || hasBodyError) {
+          if (hasError || isBodyErrored) {
             if (isArray(value)) {
               this.removeFiles(value);
             } else {
@@ -173,6 +168,16 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       }
 
       return this.removeFile(files.path);
+    }
+
+    public isBodyErrored() {
+      const isBodyErrored = Boolean(this.request.body._errored)
+      this.logger.infoMessage(`isBodyErrored=${isBodyErrored}`)
+      if (isBodyErrored) {
+        delete this.request.body.constructor.prototype._errored
+      }
+
+      return isBodyErrored
     }
 
     public removeFile(path: string) {
