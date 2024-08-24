@@ -37,7 +37,7 @@ export class ProductService {
     return `This action returns a #${id} product`;
   }
 
-  update(id: number, updateProductDto: Prisma.ProductUpdateInput) {
+  update(id: number, _: Prisma.ProductUpdateInput) {
     return `This action updates a #${id} product`;
   }
 
