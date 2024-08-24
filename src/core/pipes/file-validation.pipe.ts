@@ -1,4 +1,5 @@
 import {
+  ArgumentMetadata,
   HttpStatus,
   Inject,
   Injectable,
@@ -8,7 +9,7 @@ import {
   PipeTransform,
 } from '@nestjs/common';
 import { isArray, isObject } from 'class-validator';
-import { IFileValidationPipeAM, IFileValidationPipeOptions, TValue } from './types';
+import { IFileValidationPipeOptions, TValue } from './types';
 import { UploadFileTypeValidator } from './validators/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
 import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.interface';
@@ -16,6 +17,7 @@ import { Logger } from '~logger/Logger';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { unlink, rename } from 'fs';
+
 
 export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: IFileValidationPipeOptions) => {
   @Injectable()
@@ -34,8 +36,8 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     async transform(
-      value: TValue,
-      metadata: IFileValidationPipeAM,
+      value: TTypeWithConstructor<TValue, { isMulti?: boolean, fieldname?: string }>,
+      metadata: ArgumentMetadata,
     ) {
       this.logger.debug(`Start... \n ${JSON.stringify({
         fileIsRequired: this.fileIsRequired,
@@ -44,16 +46,16 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       let pipe: ParseFilePipe;
 
       if (metadata.type === 'custom') {
-        const isMulti = metadata.metatype.isMulti || this.isMulti(value);
-        const missingRequiredField = this.getMissingRequiredField(value, isMulti, metadata.metatype);
-
+        const isMulti = value?.constructor?.isMulti || this.isMulti(value);
+        const fieldname = value?.constructor?.fieldname || 'files';
+        const missingRequiredField = this.getMissingRequiredField(value, isMulti, fieldname);
         this.logger.info({
           missingRequiredField,
           isMulti,
           value,
           metadata,
+          fieldname,
         });
-
 
         if (missingRequiredField !== null) {
           this.logger.infoMessage('EmptyFiles');
@@ -69,24 +71,21 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
             .catch(this.createError(missingRequiredField))
             .finally(() => {
               if (isMulti) {
-                Promise.all(Object.values(value)
-                  .flat(Infinity)
-                  .map(val => this.removeFile(val.path)),
-                );
+                this.removeFiles(Object.values(value).flat(Infinity));
               }
             });
         }
 
         if (isMulti) {
           let hasError = false;
-          let checkedChunksCount = 0
+          let checkedChunksCount = 0;
 
           return Promise.all(Object.keys(value).map((key) => {
             this.logger.infoMessage(`[MULTI SCENARIO]: START... {key=${key}}`);
 
             return pipe.transform(value?.[key]).then((data) => {
-              this.logger.infoMessage(`[MULTI SCENARIO]: SUCCESS ${JSON.stringify({ 
-                key, data 
+              this.logger.infoMessage(`[MULTI SCENARIO]: SUCCESS ${JSON.stringify({
+                key, data,
               }, null, 2)}`);
               return { [key]: data };
             }).catch((error) => {
@@ -97,22 +96,17 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
 
               return this.createError(key)(error);
             }).finally(() => {
-              checkedChunksCount++
+              checkedChunksCount++;
               if (checkedChunksCount === Object.keys(value).length) {
                 this.logger.infoMessage(`[MULTI SCENARIO]: FINISH. {hasError=${hasError}, key=${key}}`);
-                if (hasError || Boolean(this.request.body._errored)) {
-                  Promise.all(Object.values(value)
-                    .flat(Infinity)
-                    .map(val => this.removeFile(val.path)),
-                  );
+                const hasBodyError = Boolean(this.request.body._errored)
+                if (hasBodyError) {
+                  delete this.request.body.constructor.prototype._errored
+                }
+                if (hasError || hasBodyError) {
+                  this.removeFiles(Object.values(value).flat(Infinity));
                 } else {
-                  Promise.all(Object.values(value)
-                    .flat(Infinity)
-                    .map(val => this.renameFile(
-                      val.path,
-                      `${val.path}.${val.ext}`,
-                    )),
-                  );
+                  this.renameFiles(Object.values(value).flat(Infinity));
                 }
               }
             });
@@ -130,32 +124,55 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
           });
         }
 
-        this.logger.infoMessage(`Array or one scenario: [${metadata.metatype.fieldname}] start...`);
+        this.logger.infoMessage(`Array or one scenario: [${fieldname}] start...`);
         let hasError = false;
-        return pipe.transform(value)
-          .catch((error) => {
-            hasError = true;
-            return this.createError(metadata.metatype.fieldname)(error);
-          })
-          .finally(() => {
-            if (hasError || Boolean(this.request.body._errored)) {
-              if (isArray(value)) {
-                Promise.all(value.map(val => this.removeFile(val.path)));
-              } else {
-                this.removeFile((value as Express.Multer.File).path);
-              }
+        return pipe.transform(value).catch((error) => {
+          hasError = true;
+          return this.createError(fieldname)(error);
+        }).finally(() => {
+          const hasBodyError = Boolean(this.request.body._errored)
+          if (hasBodyError) {
+            delete this.request.body.constructor.prototype._errored
+          }
+
+          if (hasError || hasBodyError) {
+            if (isArray(value)) {
+              this.removeFiles(value);
             } else {
-              if (isArray(value)) {
-                Promise.all(value.map(val => this.renameFile(
-                  val.path,
-                  `${val.path}.${val.ext}`,
-                )));
-              } else {
-                this.renameFile((value as Express.Multer.File).path, `${value.path}.${value.ext}`);
-              }
+              this.removeFiles(value as Express.Multer.File);
             }
-          });
+          } else {
+            if (isArray(value)) {
+              this.renameFiles(value);
+            } else {
+              this.renameFiles(value as Express.Multer.File);
+            }
+          }
+        });
       }
+    }
+
+    public renameFiles(files: Express.Multer.File | Express.Multer.File[]) {
+      if (isArray(files)) {
+        return Promise.all(files.map(file => {
+          const oldPath = file.path;
+          const newPath = `${oldPath}.${file.ext}`;
+          file.path = newPath;
+          return this.renameFile(oldPath, newPath);
+        }));
+      }
+      const oldPath = files.path;
+      const newPath = `${oldPath}.${files.ext}`;
+      files.path = newPath;
+      return this.renameFile(oldPath, newPath);
+    }
+
+    public removeFiles(files: Express.Multer.File | Express.Multer.File[]) {
+      if (isArray(files)) {
+        return Promise.all(files.map(file => this.removeFile(file.path)));
+      }
+
+      return this.removeFile(files.path);
     }
 
     public removeFile(path: string) {
@@ -209,7 +226,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
         }
         const errorMessage = error.response?.error;
         error.response = {
-          [erroredFieldname || fieldname || 'files']: [
+          [erroredFieldname || fieldname]: [
             errorResponseMessage,
           ],
         };
@@ -220,14 +237,14 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     //! returning null when all required fields are exists
-    public getMissingRequiredField(value: TValue, isMulti: boolean, metatype: IFileValidationPipeAM['metatype']) {
+    public getMissingRequiredField(value: TValue, isMulti: boolean, fieldname: string | undefined) {
       if (this.fileIsRequired) {
         const isNotEmptyValue = (!value
           || (isArray(value) && !value.length)
           || (isObject(value) && !Object.keys(value).length)
         );
         if (isNotEmptyValue) {
-          return isArray(this.fileIsRequired) ? this.fileIsRequired[0] : (metatype.fieldname || '');
+          return isArray(this.fileIsRequired) ? this.fileIsRequired[0] : fieldname;
         }
 
         if (isMulti && isArray(this.fileIsRequired)) {

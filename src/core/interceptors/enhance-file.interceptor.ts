@@ -55,13 +55,13 @@ type TEnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor> = T 
 //* passing metadata into file or files object(for file-validation.pipe)
 export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor>(
   ...[fileInterceptor, options = {
-    field: null
+    field: null,
   }]: Parameters<TEnhanceFileInterceptor<T>>
 ): Type<NestInterceptor> {
   @Injectable()
   class MixinInterceptor implements NestInterceptor {
     private logger = new Logger('EnhanceFileInterceptor');
-    private readonly nestedKeyRegex: RegExp = /\[([^\]]+)]/g;
+    // private readonly nestedKeyRegex: RegExp = /\[([^\]]+)]/g;
 
     async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
       const {
@@ -69,29 +69,25 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         field,
         ...localOptions
       } = options as EnhanceMulterOptions<T> & { errorFieldname?: string };
-      // const match = this.nestedKeyRegex.exec((field as any).name);
-      // console.log(match, this.nestedKeyRegex.exec((field as any).name));
-      // console.log({ maxCount: +match[1], names: (field as any).name.split(match[0]) }, 777);
       const {
         interceptor,
-        fieldname
+        fieldname,
       } = this.getInterceptorAndFieldNames(field, localOptions);
+      // const match = this.nestedKeyRegex.exec((field as any).name);
 
-      // this.logger.debug(`fieldNames: ${JSON.stringify(fieldNames, null, 2)}`);
-      this.logger.debug(`fieldNames: ${JSON.stringify(field, null, 2)}`);
+      this.logger.debug(`fieldNames: ${JSON.stringify({ field, fieldname}, null, 2)}`);
 
       try {
         await new interceptor().intercept(context, next);
         this.logger.infoMessage('SUCCESS');
-        this.generateFileNameIfNotExist( context, fieldname);
+        this.generateFileNameIfNotExist(context, fieldname);
 
         return next.handle();
       } catch (error: any) {
         this.logger.infoMessage('ERROR');
         const errorMessage = error.response?.error;
         error.response = {
-          [errorFieldname
-          || this.getFieldNames(field)]: [
+          [errorFieldname || fieldname || 'files']: [
             error.message,
           ],
         };
@@ -99,15 +95,6 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
 
         throw error;
       }
-    }
-
-    private getFieldNames(fieldNames: string | MulterField | MulterField[]/*string | string[]*/) {
-      return (isArray(fieldNames)
-          ? 'MultiFile'
-          : isObject(fieldNames)
-            ? fieldNames.name
-            : fieldNames
-      ) || 'file';
     }
 
     private getInterceptorAndFieldNames(field: EnhanceMulterOptions['field'], localOptions: MulterOptions) {
@@ -189,17 +176,19 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         if (!req.file) {
           req.file = {};
         }
-        req.file.constructor.fieldname = fieldname
+        req.file.constructor.fieldname = fieldname;
       }
 
-      if (fileInterceptor.name === 'FilesInterceptor' && req.files) {
-        req.files.constructor.fieldname = fieldname
+      if (fileInterceptor.name === 'FilesInterceptor') {
+        if (!req.files.length) {
+          req.files = [];
+        }
+        req.files.constructor.fieldname = fieldname;
       }
 
       if (fileInterceptor.name === 'FileFieldsInterceptor'/* && req.files*/) {
         req.files = { ...req.files };
-        req.files.constructor.isMulti = true
-        // req.files.constructor.fieldname = fieldName
+        req.files.constructor.isMulti = true;
       }
     }
   }

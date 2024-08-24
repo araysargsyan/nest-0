@@ -10,9 +10,6 @@ import {
   UploadedFiles,
   UseInterceptors,
   // UseGuards,
-  Injectable,
-  PipeTransform,
-  Inject,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ProductService } from './product.service';
@@ -26,39 +23,10 @@ import {
 } from '@nestjs/platform-express';
 import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 import { EnhanceFileInterceptor } from '@core/interceptors/enhance-file.interceptor';
+import { MargeFilesToBodyPipe } from '@core/pipes/marge-files-to-body.pipe';
 // import { User } from '~decorators/request-user.decorator';
-import { REQUEST } from '@nestjs/core';
-
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];
-
-
-@Injectable()
-export class MargeFilesToBodyPipe implements PipeTransform {
-  // private logger = new Logger('FileValidationPipe');
-
-  constructor(
-    @Inject(REQUEST) readonly request: Request
-  ) {}
-
-  async transform(
-    value: any,
-    metadata: any,
-  ) {
-    console.log(`MargeFilesToBodyPipe$$ ${JSON.stringify({
-      value,
-      metadata,
-      body: this.request.body
-    }, null, 2)}`);
-
-
-    return {
-      ...this.request.body,
-      files: value
-    }
-  }
-
-}
 
 
 @Controller('product')
@@ -78,33 +46,27 @@ export class ProductController {
     ),
   )
   async create(
-    @Body() createProductDto: CreateProductDto,
-    // @User('id') userId: string,
+    @Body() _: CreateProductDto,
+    // @User('id') userId: number,
     @UploadedFiles(
       FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
         fileIsRequired: true,
       }),
-      // MargeFilesToBodyPipe
-    ) images?: Express.Multer.File[],
+      MargeFilesToBodyPipe('path')
+    ) bodyWithImages: CreateProductDto,
   ) {
-    console.log('CONTROLLER(product/create)', { images });
-    // return this.productService.create({
-    //   ...createProductDto,
-    //   userId: 1,
-    //   images: images.map((img) => img.path),
-    // });
+    console.log('CONTROLLER(product/create)', { bodyWithImages });
+    return this.productService.create(bodyWithImages, /*userId ||*/ 1);
   }
 
   @Patch('document')
   @UseInterceptors(
-    // FileInterceptor('document'),
     EnhanceFileInterceptor(
       FileInterceptor,
       {
         field: 'document',
         dest: 'public/uploads/products/documents',
-        // limits: {}
       },
     ),
   )
@@ -130,7 +92,7 @@ export class ProductController {
           { name: 'multi2', maxCount: 2 },
         ],
         dest: 'public/uploads/products/multi',
-        errorFieldname: 'files'
+        errorFieldname: 'multiFiles'
       }
     ),
   )
@@ -155,7 +117,7 @@ export class ProductController {
           files: 6,
         },
         dest: 'public/uploads/products/any',
-        errorFieldname: 'anyfiles'
+        errorFieldname: 'anyFiles'
       }
     )
   )

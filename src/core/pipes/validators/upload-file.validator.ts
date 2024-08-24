@@ -4,6 +4,7 @@ import { Logger } from '~logger/Logger';
 // import * as fileType from 'file-type-mime';
 
 import { IUploadTypeValidatorOptions } from '~types';
+import { isUndefined } from '@nestjs/common/utils/shared.utils';
 
 
 export class UploadFileTypeValidator extends FileValidator {
@@ -24,11 +25,15 @@ export class UploadFileTypeValidator extends FileValidator {
     this.logger.debug('Start checking...');
     // console.log(file, this.validationOptions);
     const isFileUploaded = Boolean(file.path);
-    const data = isFileUploaded ? await promises.readFile(file.path) : file.buffer;
+    const buffer = isFileUploaded ? await promises.readFile(file.path) : file.buffer;
     // const response =await FileType.fromBuffer(data);
     const response = await import('file-type')
-      .then((FileType) => FileType.fileTypeFromBuffer(data));
+      .then((FileType) => FileType.fileTypeFromBuffer(buffer));
     const hasError = !response || !this.validationOptions.fileType.includes(response.mime) /*|| hasErrorBefore*/;
+
+    if(isUndefined(response)) {
+      this.logger.warn(`FILE [${file.originalname}] WAS BROKEN OR NOT SPURTED FOR VALIDATION`)
+    }
 
     this.logger.infoMessage('Finish checking.');
     this.logger.info({

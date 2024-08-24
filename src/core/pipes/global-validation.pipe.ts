@@ -1,4 +1,12 @@
-import { BadRequestException, Inject, Injectable, PipeTransform, Scope, ValidationError } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  PipeTransform,
+  Scope,
+  ValidationError,
+} from '@nestjs/common';
 import { validate, ValidatorOptions } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { IArgumentMetadataGP } from './types';
@@ -7,9 +15,9 @@ import { Request } from 'express';
 import { TUniqueKeys } from '~types';
 import { Logger } from '~logger/Logger';
 
-@Injectable({scope: Scope.REQUEST})
+@Injectable({ scope: Scope.REQUEST })
 export class GlobalValidationPipe implements PipeTransform {
-  private readonly logger = new Logger('GlobalValidationPipe')
+  private readonly logger = new Logger('GlobalValidationPipe');
   private validatorOptions: ValidatorOptions = {
     skipMissingProperties: false,
     skipUndefinedProperties: false,
@@ -25,10 +33,12 @@ export class GlobalValidationPipe implements PipeTransform {
 
   async transform(value: unknown, metadata: IArgumentMetadataGP) {
     const extraValidationOptions = metadata.metatype?.validatorOptions;
-    const skipValidation = extraValidationOptions === null || metadata.type === 'custom';
+    const skipValidation = metadata.type === 'custom'
+      || extraValidationOptions === null
+      || this.isNotDto(metadata.metatype?.name);
 
     if (skipValidation) {
-      this.logger.debug(`Skip ${metadata.type}`)
+      this.logger.debug(`Skip ${metadata.type}`);
       return value;
     }
 
@@ -39,19 +49,28 @@ export class GlobalValidationPipe implements PipeTransform {
       extraValidationOptions,
     }, null, 2)}`);
 
-    const { instance, errors } = await this.validate(metadata.metatype, value, extraValidationOptions);
+    try {
+      const { instance, errors } = await this.validate(metadata.metatype, value, extraValidationOptions);
 
-    this.logger.debug(`FINISH -> ${JSON.stringify({instance, errors}, null, 2)}`)
+      this.logger.debug(`FINISH -> ${JSON.stringify({ instance, errors }, null, 2)}`);
 
-    if (errors) {
-      this.logger.infoMessage('BODY WAS ERRORED')
-      this.request.body = {...this.request.body}
+      if (errors) {
+        this.logger.error('BODY WAS ERRORED');
+        throw new BadRequestException(errors);
+      }
+
+      this.request.body = { ...instance };
+      return instance;
+    } catch (error) {
+      this.request.body = { ...this.request.body };
       this.request.body.constructor.prototype._errored = true;
-      this.logger.info(new BadRequestException(errors))
-      throw new BadRequestException(errors);
-    }
 
-    return instance;
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException(error);
+    }
   }
 
   private async validate(metatype: IArgumentMetadataGP['metatype'], value: unknown, extraValidationOptions: ValidatorOptions) {
@@ -60,7 +79,7 @@ export class GlobalValidationPipe implements PipeTransform {
     const validatorOptions = {
       ...this.validatorOptions,
       ...extraValidationOptions,
-    }
+    };
 
     if (uniqueKeys) {
       const uniqueKeysArr = Object.keys(uniqueKeys);
@@ -134,5 +153,14 @@ export class GlobalValidationPipe implements PipeTransform {
     });
 
     return errorsObj;
+  }
+
+  private isNotDto(name: string) {
+    return name === undefined
+      || name === 'Object'
+      || name === 'Array'
+      || name === 'Boolean'
+      || name === 'String'
+      || name === 'Number'
   }
 }

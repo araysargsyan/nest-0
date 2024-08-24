@@ -7,7 +7,7 @@ export class Logger extends NextLogger implements LoggerService {
     console.log(`${chalk.blueBright('INFO')} ${coloredContext}`, message);
   }
 
-  infoMessage(message: string, context?: string) {
+  infoMessage(message: string, _?: string) {
     const coloredMessage = chalk.blueBright(message);
     this.info(coloredMessage)
   }
