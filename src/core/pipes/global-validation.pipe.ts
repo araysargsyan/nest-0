@@ -10,12 +10,12 @@ import {
 } from '@nestjs/common';
 import { validate, ValidatorOptions } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { IArgumentMetadataGP } from './types';
+import { TExtraValidatorOptions } from './types';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { IUniquesMetadata } from '~types';
 import { Logger } from '~logger/Logger';
-import { BODY_ERRORED, HAS_UNIQUE, UNIQUES_METADATA } from '~constants/core.const';
+import { BODY_ERRORED, HAS_UNIQUE, UNIQUES_METADATA, VALIDATOR_OPTIONS } from '~constants/core.const';
 
 @Injectable({ scope: Scope.REQUEST })
 export class GlobalValidationPipe implements PipeTransform {
@@ -35,8 +35,10 @@ export class GlobalValidationPipe implements PipeTransform {
   ) {
   }
 
-  async transform(value: unknown, metadata: IArgumentMetadataGP) {
-    const extraValidationOptions = metadata.metatype?.validatorOptions;
+  async transform(value: unknown, metadata: ArgumentMetadata) {
+    const extraValidationOptions = Reflect.getMetadata(
+      VALIDATOR_OPTIONS, metadata.metatype
+    ) as TExtraValidatorOptions;
     const skipValidation = metadata.type === 'custom'
       || extraValidationOptions === null
       || this.isNotDto(metadata.metatype?.name);
@@ -85,7 +87,7 @@ export class GlobalValidationPipe implements PipeTransform {
     }
   }
 
-  private async validate(metatype: IArgumentMetadataGP['metatype'], value: unknown, extraValidationOptions: ValidatorOptions) {
+  private async validate(metatype: ArgumentMetadata['metatype'], value: unknown, extraValidationOptions: ValidatorOptions) {
     const errors: ValidationError[] = [];
     const validatorOptions = {
       ...this.validatorOptions,

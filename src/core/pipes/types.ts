@@ -1,13 +1,8 @@
 import { ValidatorOptions } from 'class-validator';
-import { ArgumentMetadata } from '@nestjs/common';
 
+type NonEmptyArray<T> = [T, ...T[]];
+export type TExtraValidatorOptions = ValidatorOptions | null | undefined
 
-export interface IArgumentMetadataGP extends ArgumentMetadata {
-  metatype?: ArgumentMetadata['metatype'] & {
-    validatorOptions?: ValidatorOptions | null;
-    // uniqueKeys?: Record<string, null | 'pending' | boolean>;
-  };
-}
 export interface IFileValidationPipeOptions {
   fileType?: string[],
   fileIsRequired?: boolean | NonEmptyArray<string>
