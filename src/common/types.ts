@@ -1,13 +1,6 @@
-import { ValidationArguments as NextValidationArguments } from 'class-validator';
-
-type TUniqueKey = null | 'pending' | boolean
-export type TUniqueKeys = Record<string, TUniqueKey>
-
-export interface IValidationArguments extends NextValidationArguments {
-  object: IConstructorPrototype<{ uniqueKeys: TUniqueKeys }>;
-}
+export type TUniqueKeys = Record<string, null | 'pending' | boolean>
+export type TUniqueMethods = Record<string, string>
 
 export interface IUploadTypeValidatorOptions {
   fileType: string[];
-  filesCount?: number;
 }

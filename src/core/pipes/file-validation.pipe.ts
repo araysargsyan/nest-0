@@ -9,7 +9,7 @@ import {
   PipeTransform,
 } from '@nestjs/common';
 import { isArray, isObject } from 'class-validator';
-import { IFileValidationPipeOptions, TValue } from './types';
+import { IFileValidationPipeOptions, TFileValidationPipeValue } from './types';
 import { UploadFileTypeValidator } from './validators/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
 import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.interface';
@@ -37,7 +37,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     async transform(
-      value: TValue,
+      value: TFileValidationPipeValue,
       metadata: ArgumentMetadata,
     ) {
       const fileMetadata: undefined | {
@@ -213,7 +213,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       }
     }
 
-    public isMulti(value: TValue) {
+    public isMulti(value: TFileValidationPipeValue) {
       if (isObject(value)) {
         for (const key of Object.keys(value)) {
           if (isArray(value[key])) {
@@ -251,7 +251,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     //! returning null when all required fields are exists
-    public getMissingRequiredField(value: TValue, isMulti: boolean, fieldname: string | undefined) {
+    public getMissingRequiredField(value: TFileValidationPipeValue, isMulti: boolean, fieldname: string | undefined) {
       if (this.fileIsRequired) {
         const isNotEmptyValue = (!value
           || (isArray(value) && !value.length)

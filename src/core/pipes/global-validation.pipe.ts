@@ -15,7 +15,7 @@ import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { TUniqueKeys } from '~types';
 import { Logger } from '~logger/Logger';
-import { BODY_ERRORED } from '~constants/core.const';
+import { BODY_ERRORED, UNIQUE_KEYS } from '~constants/core.const';
 
 @Injectable({ scope: Scope.REQUEST })
 export class GlobalValidationPipe implements PipeTransform {
@@ -58,7 +58,6 @@ export class GlobalValidationPipe implements PipeTransform {
 
     try {
       const { instance, errors } = await this.validate(metadata.metatype, value, extraValidationOptions);
-
       this.logger.debug(`FINISH -> ${JSON.stringify({ instance, errors }, null, 2)}`);
 
       if (errors) {
@@ -86,7 +85,8 @@ export class GlobalValidationPipe implements PipeTransform {
   }
 
   private async validate(metatype: IArgumentMetadataGP['metatype'], value: unknown, extraValidationOptions: ValidatorOptions) {
-    const uniqueKeys: TUniqueKeys = metatype.prototype.uniqueKeys;
+    // const uniqueKeys: TUniqueKeys = metatype.prototype.uniqueKeys;
+    const uniqueKeys: TUniqueKeys = Reflect.getMetadata(UNIQUE_KEYS, metatype.prototype);
     const errors: ValidationError[] = [];
     const validatorOptions = {
       ...this.validatorOptions,
@@ -98,7 +98,8 @@ export class GlobalValidationPipe implements PipeTransform {
 
       for (let i = 0; i < uniqueKeysArr.length; i++) {
         const key = uniqueKeysArr[i];
-        (metatype.prototype.uniqueKeys as TUniqueKeys)[key] = 'pending';
+        // (metatype.prototype.uniqueKeys as TUniqueKeys)[key] = 'pending';
+        uniqueKeys[key] = 'pending';
         const uniqueInstance = plainToInstance(metatype, value, {
           targetMaps: [{
             target: metatype,
