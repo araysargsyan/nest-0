@@ -1,5 +1,7 @@
-export type TUniqueKeys = Record<string, null | 'pending' | boolean>
-export type TUniqueMethods = Record<string, string>
+export interface IUniquesMetadata {
+  status: null | 'pending' | boolean,
+  method?: string
+}
 
 export interface IUploadTypeValidatorOptions {
   fileType: string[];

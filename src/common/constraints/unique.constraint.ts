@@ -4,8 +4,8 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { ValidationArguments } from 'class-validator/types/validation/ValidationArguments';
-import { UNIQUE_KEYS, UNIQUE_METHODS } from '../constants/core.const';
-import { TUniqueKeys, TUniqueMethods } from '../types';
+import { IUniquesMetadata } from '../types';
+import { UNIQUES_METADATA } from '~constants/core.const';
 
 @ValidatorConstraint({ async: true, name: 'isUnique' })
 @Injectable()
@@ -14,21 +14,21 @@ class UniqueConstraint implements ValidatorConstraintInterface {
   }
 
   async validate(value: unknown, args: ValidationArguments): Promise<boolean> {
-    // const uniqueKeys = args.object.constructor.prototype.uniqueKeys;
-    const uniqueKeys: TUniqueKeys = Reflect.getMetadata(UNIQUE_KEYS, args.object);
-    const methods: TUniqueMethods = Reflect.getMetadata(UNIQUE_METHODS, args.object);
-    console.log(`UniqueConstraint: START(${args.property})`, { value, args, uniqueKeys, methods });
+    const uniquesMedata = Reflect.getMetadata(
+      UNIQUES_METADATA, args.object, args.property
+    ) as IUniquesMetadata
+    console.log(`UniqueConstraint: START(${args.property})`, { value, args, uniquesMedata });
 
-    if (uniqueKeys[args.property] === 'pending') {
+    if (uniquesMedata.status === 'pending') {
       console.log('........................', args.property);
-      // const isValid = await this.myService[args.constraints[0]](value);
-      const isValid = await this.myService[methods[args.property]](value);
-      uniqueKeys[args.property] = isValid;
+      const isValid = await this.myService[uniquesMedata.method](value);
+      uniquesMedata.status = isValid
+
       return isValid;
     }
 
-    console.log(`UniqueConstraint: END(${args.property})`, { uniqueKeys });
-    return uniqueKeys[args.property] === true || uniqueKeys[args.property] === null;
+    console.log(`UniqueConstraint: END(${args.property})`, { uniquesMedata });
+    return uniquesMedata.status === true || uniquesMedata.status === null;
   }
 
   defaultMessage({property, value}: ValidationArguments): string {

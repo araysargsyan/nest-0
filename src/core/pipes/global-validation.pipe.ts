@@ -13,9 +13,9 @@ import { plainToInstance } from 'class-transformer';
 import { IArgumentMetadataGP } from './types';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
-import { TUniqueKeys } from '~types';
+import { IUniquesMetadata } from '~types';
 import { Logger } from '~logger/Logger';
-import { BODY_ERRORED, UNIQUE_KEYS } from '~constants/core.const';
+import { BODY_ERRORED, HAS_UNIQUE, UNIQUES_METADATA } from '~constants/core.const';
 
 @Injectable({ scope: Scope.REQUEST })
 export class GlobalValidationPipe implements PipeTransform {
@@ -28,11 +28,12 @@ export class GlobalValidationPipe implements PipeTransform {
     forbidNonWhitelisted: true,
     forbidUnknownValues: true,
   };
-  fileMetatype: ArgumentMetadata['metatype']
+  fileMetatype: ArgumentMetadata['metatype'];
 
   constructor(
     @Inject(REQUEST) protected readonly request: Request,
-  ) {}
+  ) {
+  }
 
   async transform(value: unknown, metadata: IArgumentMetadataGP) {
     const extraValidationOptions = metadata.metatype?.validatorOptions;
@@ -40,8 +41,8 @@ export class GlobalValidationPipe implements PipeTransform {
       || extraValidationOptions === null
       || this.isNotDto(metadata.metatype?.name);
 
-    if(metadata.type === 'custom') {
-      this.fileMetatype = metadata.metatype
+    if (metadata.type === 'custom') {
+      this.fileMetatype = metadata.metatype;
     }
 
     if (skipValidation) {
@@ -65,15 +66,15 @@ export class GlobalValidationPipe implements PipeTransform {
         throw new BadRequestException(errors);
       }
 
-      delete this.fileMetatype
+      delete this.fileMetatype;
       this.request.body = { ...instance };
       return instance;
     } catch (error) {
       // this.request.body = { ...this.request.body };
       // this.request.body.constructor.prototype._errored = true;
-      if(this.fileMetatype) {
-        Reflect.defineMetadata(BODY_ERRORED, true, this.fileMetatype)
-        delete this.fileMetatype
+      if (this.fileMetatype) {
+        Reflect.defineMetadata(BODY_ERRORED, true, this.fileMetatype);
+        delete this.fileMetatype;
       }
 
       if (error instanceof BadRequestException) {
@@ -85,41 +86,44 @@ export class GlobalValidationPipe implements PipeTransform {
   }
 
   private async validate(metatype: IArgumentMetadataGP['metatype'], value: unknown, extraValidationOptions: ValidatorOptions) {
-    // const uniqueKeys: TUniqueKeys = metatype.prototype.uniqueKeys;
-    const uniqueKeys: TUniqueKeys = Reflect.getMetadata(UNIQUE_KEYS, metatype.prototype);
     const errors: ValidationError[] = [];
     const validatorOptions = {
       ...this.validatorOptions,
       ...extraValidationOptions,
     };
 
-    if (uniqueKeys) {
-      const uniqueKeysArr = Object.keys(uniqueKeys);
+    if (Boolean(Reflect.getMetadata(HAS_UNIQUE, metatype.prototype))) {
+      const uniqueKeysArr = [];
+      const valueKeys = Object.keys(value);
 
-      for (let i = 0; i < uniqueKeysArr.length; i++) {
-        const key = uniqueKeysArr[i];
-        // (metatype.prototype.uniqueKeys as TUniqueKeys)[key] = 'pending';
-        uniqueKeys[key] = 'pending';
-        const uniqueInstance = plainToInstance(metatype, value, {
-          targetMaps: [{
-            target: metatype,
-            properties: { [key]: metatype },
-          }],
-        });
+      for (let i = 0; i < valueKeys.length; i++) {
+        const key = valueKeys[i];
+        const uniquesMetadata: IUniquesMetadata = Reflect.getMetadata(
+          UNIQUES_METADATA, metatype.prototype, key
+        );
+        if (uniquesMetadata) {
+          uniqueKeysArr.push(key)
+          uniquesMetadata.status = 'pending';
 
-        errors.push(...(await validate(uniqueInstance, {
-          ...validatorOptions,
-          stopAtFirstError: true,
-        })));
+          const uniqueInstance = plainToInstance(metatype, value, {
+            targetMaps: [{
+              target: metatype,
+              properties: { [key]: metatype },
+            }],
+          });
 
-        // console.log('after validate unique', { key, errors, uniqueKeys });
+          errors.push(...(await validate(uniqueInstance, {
+            ...validatorOptions,
+            stopAtFirstError: true,
+          })));
 
-        if (errors.length) break;
+          uniquesMetadata.status = null;
+
+          // console.log('after validate unique', { key, errors, uniqueKeys });
+
+          if (errors.length) break;
+        }
       }
-
-      uniqueKeysArr.forEach((key) => {
-        uniqueKeys[key] = null;
-      });
 
       if (errors.length) {
         return {
@@ -174,6 +178,6 @@ export class GlobalValidationPipe implements PipeTransform {
       || name === 'Array'
       || name === 'Boolean'
       || name === 'String'
-      || name === 'Number'
+      || name === 'Number';
   }
 }
