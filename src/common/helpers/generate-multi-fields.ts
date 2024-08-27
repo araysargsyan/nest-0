@@ -8,7 +8,7 @@ export class GenerateMultiFields<T extends boolean = false> {
   public fieldNames?: string[]
 
   constructor(
-    nestedFields: TNestedMulterField | TNestedMulterField[],
+    nestedFields: TNestedMulterField[],
     private withFieldNames: T = false as T,
   ) {
     if(withFieldNames) {
@@ -16,8 +16,6 @@ export class GenerateMultiFields<T extends boolean = false> {
     }
     if (isArray(nestedFields)) {
       nestedFields.forEach((field) => this.generateNestedField(field));
-    } else {
-      this.generateNestedField(nestedFields);
     }
   }
 
