@@ -40,19 +40,26 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       value: TFileValidationPipeValue,
       metadata: ArgumentMetadata,
     ) {
-      const fileMetadata: undefined | {
-        isMulti?: boolean;
-        fieldname?: string;
-      } = Reflect.getMetadata(FILE_METADATA, this.request.route)
-      Reflect.defineMetadata(FILE_METADATA, fileMetadata, metadata.metatype)
-      this.logger.debug(`Start... \n ${JSON.stringify({
-        fileIsRequired: this.fileIsRequired,
-        fileType: this.fileType,
-        fileMetadata
-      }, null, 2)}`);
+
       let pipe: ParseFilePipe;
 
       if (metadata.type === 'custom') {
+        const isRequired = isArray(this.fileIsRequired) ? Boolean(this.fileIsRequired.length) : this.fileIsRequired
+        const fileMetadata: undefined | {
+          isMulti?: boolean;
+          fieldname?: string;
+        } = Reflect.getMetadata(FILE_METADATA, this.request.route)
+        Reflect.defineMetadata(FILE_METADATA, fileMetadata, metadata.metatype)
+        this.logger.debug(`Start... \n ${JSON.stringify({
+          fileIsRequired: this.fileIsRequired,
+          isRequired,
+          fileType: this.fileType,
+          fileMetadata
+        }, null, 2)}`);
+
+        if(!isRequired && !value) {
+          return value
+        }
         const isMulti = /*value?.constructor?.isMulti */ fileMetadata?.isMulti || this.isMulti(value);
         const fieldname = /*value?.constructor?.fieldname */fileMetadata?.fieldname || 'files';
         const missingRequiredField = this.getMissingRequiredField(value, isMulti, fieldname);
@@ -66,10 +73,10 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
 
         if (missingRequiredField !== null) {
           this.logger.infoMessage('EmptyFiles');
-          pipe = this.generatePipe(HttpStatus.BAD_REQUEST);
+          pipe = this.generatePipe(HttpStatus.BAD_REQUEST, isRequired);
         } else {
           this.logger.infoMessage('ExistFiles');
-          pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY);
+          pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY, isRequired);
         }
 
         if (missingRequiredField !== null) {
@@ -79,7 +86,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
             .finally(() => {
               if (isMulti) {
                 this.checkBodyError(metadata.metatype);
-                this.removeFiles(Object.values(value).flat(Infinity));
+                value && this.removeFiles(Object.values(value).flat(Infinity));
               }
             });
         }
@@ -227,10 +234,11 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       return false;
     }
 
-    public createError(fieldname?: string) {
+    public createError(defaultFieldname?: string) {
       return (error) => {
-        this.logger.error(`CATCHING ERROR ${JSON.stringify({ fieldname }, null, 2)}`);
-        let erroredFieldname = '';
+        console.log(111, error);
+        this.logger.error(`CATCHING ERROR ${JSON.stringify({ defaultFieldname }, null, 2)}`);
+        let erroredFieldname = defaultFieldname;
         let errorResponseMessage = error.message;
         const regex = /\[\s*fieldname\s*:\s*(.*)\s*]/;
         const match = regex.exec(error.message);
@@ -238,12 +246,19 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
           errorResponseMessage = errorResponseMessage.split(match[0])[1].trim();
           erroredFieldname = match[1].trim();
         }
-        const errorMessage = error.response?.error;
-        error.response = {
-          [erroredFieldname || fieldname]: [
+
+        const errorResponse = {
+          [erroredFieldname]: [
             errorResponseMessage,
           ],
-        };
+        }
+
+        if(erroredFieldname.includes('[')) {
+          // errorResponse = {}
+        }
+
+        const errorMessage = error.response?.error;
+        error.response = errorResponse;
         error.message = errorMessage;
 
         throw error;
@@ -251,14 +266,19 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     //! returning null when all required fields are exists
-    public getMissingRequiredField(value: TFileValidationPipeValue, isMulti: boolean, fieldname: string | undefined) {
+    public getMissingRequiredField(
+      value: TFileValidationPipeValue,
+      isMulti: boolean,
+      fieldname: string | undefined
+    ) {
       if (this.fileIsRequired) {
-        const isNotEmptyValue = (!value
+        const isEmptyValue = (!value
           || (isArray(value) && !value.length)
           || (isObject(value) && !Object.keys(value).length)
         );
-        if (isNotEmptyValue) {
-          return isArray(this.fileIsRequired) ? this.fileIsRequired[0] : fieldname;
+
+        if (isEmptyValue) {
+          return isArray(this.fileIsRequired) ? this.fileIsRequired[0] || null : fieldname;
         }
 
         if (isMulti && isArray(this.fileIsRequired)) {
@@ -273,10 +293,10 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       return null;
     }
 
-    public generatePipe(errorHttpStatusCode: ErrorHttpStatusCode): ParseFilePipe {
+    public generatePipe(errorHttpStatusCode: ErrorHttpStatusCode, fileIsRequired: boolean): ParseFilePipe {
       const additionalOptions: Omit<ParseFileOptions, 'validators'> = {
         errorHttpStatusCode,
-        fileIsRequired: Boolean(this.fileIsRequired),
+        fileIsRequired,
       };
 
       if (this.fileType) {

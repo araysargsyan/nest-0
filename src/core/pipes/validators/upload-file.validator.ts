@@ -2,9 +2,8 @@ import { FileValidator } from '@nestjs/common';
 import { promises } from 'fs';
 import { Logger } from '~logger/Logger';
 // import * as fileType from 'file-type-mime';
-
-import { IUploadTypeValidatorOptions } from '~types';
 import { isUndefined } from '@nestjs/common/utils/shared.utils';
+import { IUploadTypeValidatorOptions } from '../types';
 
 
 export class UploadFileTypeValidator extends FileValidator {

@@ -16,40 +16,10 @@ import {
   FilesInterceptor,
 } from '@nestjs/platform-express';
 import { MulterField, MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
-import { Logger } from '~logger/Logger';
+import { EnhanceMulterOptions, TEnhanceFileInterceptor, TFileInterceptor } from './types';
 import { FILE_METADATA } from '~constants/core.const';
+import { Logger } from '~logger/Logger';
 
-type TFileInterceptor =
-  typeof FileInterceptor
-  | typeof FilesInterceptor
-  | typeof FileFieldsInterceptor
-  | typeof AnyFilesInterceptor
-
-interface EnhanceMulterOptions<T extends TFileInterceptor = TFileInterceptor> extends MulterOptions {
-  field: T extends typeof FileInterceptor
-    ? string
-    : T extends typeof FilesInterceptor
-      ? MulterField
-      : T extends typeof FileFieldsInterceptor
-        ? MulterField[]
-        : null,
-}
-
-type TEnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor> = T extends typeof AnyFilesInterceptor
-  ? {
-    (
-      fileInterceptor: T,
-      options?: MulterOptions & { errorFieldname?: string },
-    ): Type<NestInterceptor>;
-  }
-  : {
-    (
-      fileInterceptor: T,
-      options: T extends typeof FileFieldsInterceptor
-        ? EnhanceMulterOptions<T> & { errorFieldname?: string }
-        : EnhanceMulterOptions<T>,
-    ): Type<NestInterceptor>;
-  }
 
 //* generating unique filename field into each file object when dest=undefined
 //* handling multer errors
@@ -62,6 +32,7 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
   @Injectable()
   class MixinInterceptor implements NestInterceptor {
     private logger = new Logger('EnhanceFileInterceptor');
+
     // private readonly nestedKeyRegex: RegExp = /\[([^\]]+)]/g;
 
     async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
@@ -74,7 +45,7 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         interceptor,
         fieldname,
       } = this.getInterceptorAndFieldNames(field, localOptions);
-      this.logger.debug(`fieldNames: ${JSON.stringify({field, fieldname}, null, 2)}`);
+      this.logger.debug(`fieldNames: ${JSON.stringify({ field, fieldname }, null, 2)}`);
       // const match = this.nestedKeyRegex.exec((field as any).name);
 
       try {
@@ -128,8 +99,14 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
           },
         );
       } else if (fileInterceptor.name === 'FileFieldsInterceptor') {
+        //! generate fields when have nestedFields
+        // const nestedFields = this.generateMultiFields(field as TNestedMulterField[]);
+
+        // console.log(nestedFields, 666);
+
         interceptor = (fileInterceptor as typeof FileFieldsInterceptor)(
           field as MulterField[],
+          // nestedFields,
           {
             ...localOptions,
             limits: {
@@ -178,7 +155,7 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         // }
         // request.file.constructor.fieldname = fieldname;
 
-        Reflect.defineMetadata(FILE_METADATA, { fieldname }, request.route)
+        Reflect.defineMetadata(FILE_METADATA, { fieldname }, request.route);
       }
 
       if (fileInterceptor.name === 'FilesInterceptor') {
@@ -186,14 +163,14 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         //   request.files = [];
         // }
         // request.files.constructor.fieldname = fieldname;
-        Reflect.defineMetadata(FILE_METADATA, { fieldname }, request.route)
+        Reflect.defineMetadata(FILE_METADATA, { fieldname }, request.route);
 
       }
 
       if (fileInterceptor.name === 'FileFieldsInterceptor'/* && request.files*/) {
         // request.files = { ...request.files };
         // request.files.constructor.isMulti = true;
-        Reflect.defineMetadata(FILE_METADATA, { isMulti: true }, request.route)
+        Reflect.defineMetadata(FILE_METADATA, { isMulti: true }, request.route);
       }
     }
   }

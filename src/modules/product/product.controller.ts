@@ -24,6 +24,7 @@ import {
 import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 import { EnhanceFileInterceptor } from '@core/interceptors/enhance-file.interceptor';
 import { MargeFilesToBodyPipe } from '@core/pipes/marge-files-to-body.pipe';
+import { GenerateMultiFields } from '~helpers/generate-multi-fields';
 // import { User } from '~decorators/request-user.decorator';
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];
@@ -53,7 +54,7 @@ export class ProductController {
         fileType: VALID_UPLOADS_MIME_TYPES,
         fileIsRequired: true,
       }),
-      MargeFilesToBodyPipe('path')
+      MargeFilesToBodyPipe('path'),
     ) bodyWithImages: any,
   ) {
     console.log('CONTROLLER(product/create)', { bodyWithImages });
@@ -82,30 +83,31 @@ export class ProductController {
     return this.productService.createDocument(document.path || document.filename, productId);
   }
 
+  static multiFields = new GenerateMultiFields([
+    { name: 'multi1', maxCount: 2 },
+    { name: 'multi2', maxCount: 2, required: false },
+  ], true)
   @Post('create-multi')
   @UseInterceptors(
     EnhanceFileInterceptor(
       FileFieldsInterceptor,
       {
-        field: [
-          { name: 'multi1', maxCount: 2 },
-          { name: 'multi2', maxCount: 2 },
-        ],
+        field: ProductController.multiFields.fields,
         dest: 'public/uploads/products/multi',
-        errorFieldname: 'multiFiles'
-      }
+        errorFieldname: 'multiFiles',
+      },
     ),
   )
   createMulti(
     @UploadedFiles(
       FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
-        fileIsRequired: ['multi1'],
+        fileIsRequired: ProductController.multiFields.fieldNames,
       }),
     ) files: Record<string, Express.Multer.File[]>,
   ) {
     console.log('CONTROLLER(product/create/multi)', files);
-    return files
+    return files;
   }
 
   @Post('any')
@@ -117,9 +119,9 @@ export class ProductController {
           files: 6,
         },
         dest: 'public/uploads/products/any',
-        errorFieldname: 'anyFiles'
-      }
-    )
+        errorFieldname: 'anyFiles',
+      },
+    ),
   )
   createAny(
     @UploadedFiles(
@@ -128,29 +130,73 @@ export class ProductController {
         fileIsRequired: true,
       }),
     ) files: any,
-    @Body() body: any
+    @Body() body: any,
   ) {
     console.log({ files, body });
     return files;
   }
 
+  static nestedFields = new GenerateMultiFields([
+    { //* images[0][files], images[1][files]
+      key: 'images',
+      length: 2,
+      nestedField: {
+        name: 'files',
+        maxCount: 4,
+      },
+    },
+    { //* a[0][b][0][c], a[1][b][0][c], a[0][b][1][c], a[1][b][1][c]
+      key: 'a',
+      length: 2,
+      nestedField: {
+        key: 'b',
+        length: 2,
+        nestedField: {
+          required: false,
+          name: 'c',
+          maxCount: 3,
+        },
+      },
+    },
+    { //* a[b][0][c], a[b][1][c],
+      key: 'a',
+      nestedField: {
+        key: 'b',
+        length: 2,
+        nestedField: {
+          required: false,
+          name: 'c',
+          maxCount: 3,
+        },
+      },
+    },
+  ], true)
   @Post('nested')
   @UseInterceptors(
     EnhanceFileInterceptor(
-      FilesInterceptor,
+      FileFieldsInterceptor,
       {
-        field: {
-          name: 'images[4]',
-          maxCount: 2,
-        },
-        dest: 'public/uploads/products',
+        field: ProductController.nestedFields.fields,
+        dest: 'public/uploads/products/nested',
+        errorFieldname: 'nestedMultiFiles',
+        // limits: {
+        //   fileSize: 1
+        // }
       },
     ),
   )
   createNestedFiles(
-
+    @Body() body: any,
+    @UploadedFiles(
+      FileValidationPipe({
+        fileType: VALID_UPLOADS_MIME_TYPES,
+        fileIsRequired: ProductController.nestedFields.fieldNames,
+      }),
+    ) files: any,
   ) {
-
+    console.log(ProductController.nestedFields.fieldNames)
+    console.log(ProductController.nestedFields)
+    console.log(JSON.stringify({ files, body }, null, 2));
   }
 
   @Get()

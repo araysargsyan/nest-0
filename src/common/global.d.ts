@@ -25,11 +25,14 @@ declare namespace Express {
 // interface IConstructorPrototype<T> {
 //   constructor: IConstructor<T>;
 // }
-
+//
 // type TTypeWithConstructor<T, C> = T & {
 //   // eslint-disable-next-line @typescript-eslint/ban-types
 //   constructor: Function & C;
 // }
 
-type NonEmptyArray<T> = [T, ...T[]];
-interface EmptyObject {}
+type TNonEmptyArray<T> = [T, ...T[]];
+interface IEmptyObject {}
+type TRecursiveObject<T> = {
+  [key in keyof T]?: T[key] & TRecursiveObject<T>;
+};
