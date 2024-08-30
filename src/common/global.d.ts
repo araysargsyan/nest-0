@@ -12,6 +12,8 @@ declare namespace Express {
   namespace Multer {
     interface File {
       ext?: string;
+      fieldsMap?: Array<string | number>;
+      dest?: string;
     }
   }
 }

@@ -15,3 +15,4 @@ export type TFileValidationPipeValue = Express.Multer.File
 export interface IUploadTypeValidatorOptions {
   fileType: string[];
 }
+

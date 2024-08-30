@@ -16,8 +16,9 @@ import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.i
 import { Logger } from '~logger/Logger';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
-import { unlink, rename } from 'fs';
+import { unlink, rename, mkdir, writeFile } from 'fs';
 import { BODY_ERRORED, FILE_METADATA } from '~constants/core.const';
+import { dirname } from 'path';
 
 
 export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: IFileValidationPipeOptions) => {
@@ -40,25 +41,24 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       value: TFileValidationPipeValue,
       metadata: ArgumentMetadata,
     ) {
-
       let pipe: ParseFilePipe;
 
       if (metadata.type === 'custom') {
-        const isRequired = isArray(this.fileIsRequired) ? Boolean(this.fileIsRequired.length) : this.fileIsRequired
+        const isRequired = isArray(this.fileIsRequired) ? Boolean(this.fileIsRequired.length) : this.fileIsRequired;
         const fileMetadata: undefined | {
           isMulti?: boolean;
           fieldname?: string;
-        } = Reflect.getMetadata(FILE_METADATA, this.request.route)
-        Reflect.defineMetadata(FILE_METADATA, fileMetadata, metadata.metatype)
+        } = Reflect.getMetadata(FILE_METADATA, this.request.route);
+        Reflect.defineMetadata(FILE_METADATA, fileMetadata, metadata.metatype);
         this.logger.debug(`Start... \n ${JSON.stringify({
           fileIsRequired: this.fileIsRequired,
           isRequired,
           fileType: this.fileType,
-          fileMetadata
+          fileMetadata,
         }, null, 2)}`);
 
-        if(!isRequired && !value) {
-          return value
+        if (!isRequired && !value) {
+          return value;
         }
         const isMulti = /*value?.constructor?.isMulti */ fileMetadata?.isMulti || this.isMulti(value);
         const fieldname = /*value?.constructor?.fieldname */fileMetadata?.fieldname || 'files';
@@ -74,6 +74,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
         if (missingRequiredField !== null) {
           this.logger.infoMessage('EmptyFiles');
           pipe = this.generatePipe(HttpStatus.BAD_REQUEST, isRequired);
+
         } else {
           this.logger.infoMessage('ExistFiles');
           pipe = this.generatePipe(HttpStatus.UNPROCESSABLE_ENTITY, isRequired);
@@ -118,7 +119,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
                 if (hasError || isBodyErrored) {
                   this.removeFiles(Object.values(value).flat(Infinity));
                 } else {
-                  this.renameFiles(Object.values(value).flat(Infinity));
+                  this.renameOrCrateFiles(Object.values(value).flat(Infinity));
                 }
               }
             });
@@ -152,24 +153,32 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
             }
           } else {
             if (isArray(value)) {
-              this.renameFiles(value);
+              this.renameOrCrateFiles(value);
             } else {
-              this.renameFiles(value as Express.Multer.File);
+              this.renameOrCrateFiles(value as Express.Multer.File);
             }
           }
         });
       }
     }
 
-    public renameFiles(files: Express.Multer.File | Express.Multer.File[]) {
-      Reflect.deleteMetadata(FILE_METADATA, this.request.route)
+    public renameOrCrateFiles(files: Express.Multer.File | Express.Multer.File[]) {
+      Reflect.deleteMetadata(FILE_METADATA, this.request.route);
       if (isArray(files)) {
-        return Promise.all(files.map(file => {
-          const oldPath = file.path;
-          const newPath = `${oldPath}.${file.ext}`;
-          file.path = newPath;
+        const promises = files.map(file => {
+          if (file.dest && file.buffer) {
+            const buffer = file.buffer
+            delete file.buffer
+
+            return this.createFile(
+              `${file.dest}\\${file.filename}.${file.ext}`,
+              buffer,
+            );
+          }
           return this.renameFile(oldPath, newPath);
-        }));
+        });
+
+        return Promise.all(promises);
       }
       const oldPath = files.path;
       const newPath = `${oldPath}.${files.ext}`;
@@ -178,7 +187,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     }
 
     public removeFiles(files: Express.Multer.File | Express.Multer.File[]) {
-      Reflect.deleteMetadata(FILE_METADATA, this.request.route)
+      Reflect.deleteMetadata(FILE_METADATA, this.request.route);
       if (isArray(files)) {
         return Promise.all(files.map(file => this.removeFile(file.path)));
       }
@@ -190,7 +199,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       const isBodyErrored = Boolean(Reflect.getMetadata(BODY_ERRORED, metatype));
       this.logger.infoMessage(`isBodyErrored=${isBodyErrored}`);
       if (isBodyErrored) {
-        Reflect.deleteMetadata(BODY_ERRORED, metatype)
+        Reflect.deleteMetadata(BODY_ERRORED, metatype);
       }
 
       return isBodyErrored;
@@ -218,6 +227,27 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
           }
         });
       }
+    }
+
+    public createFile(path: string, data: string | Buffer): Promise<string> {
+      return new Promise((resolve, reject) => {
+        mkdir(dirname(path), { recursive: true }, (mkdirErr) => {
+          if (mkdirErr) {
+            this.logger.error('Create directory', mkdirErr);
+            return reject(mkdirErr);
+          }
+
+          writeFile(path, data, (writeErr) => {
+            if (writeErr) {
+              this.logger.error('Create file', writeErr);
+              return reject(writeErr);
+            }
+
+            this.logger.verbose(`File created at ${path}`);
+            resolve(path);
+          });
+        });
+      });
     }
 
     public isMulti(value: TFileValidationPipeValue) {
@@ -251,9 +281,9 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
           [erroredFieldname]: [
             errorResponseMessage,
           ],
-        }
+        };
 
-        if(erroredFieldname.includes('[')) {
+        if (erroredFieldname.includes('[')) {
           // errorResponse = {}
         }
 
@@ -269,7 +299,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
     public getMissingRequiredField(
       value: TFileValidationPipeValue,
       isMulti: boolean,
-      fieldname: string | undefined
+      fieldname: string | undefined,
     ) {
       if (this.fileIsRequired) {
         const isEmptyValue = (!value
@@ -300,12 +330,12 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       };
 
       if (this.fileType) {
+        const validator = new UploadFileTypeValidator(
+          { fileType: this.fileType },
+        );
+
         return this.parseFilePipe
-          .addValidator(
-            new UploadFileTypeValidator(
-              { fileType: this.fileType },
-            ),
-          )
+          .addValidator(validator)
           .build(additionalOptions);
       }
 
@@ -315,5 +345,3 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
 
   return mixin(Pipe);
 };
-
-

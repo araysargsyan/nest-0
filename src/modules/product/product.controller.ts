@@ -22,9 +22,11 @@ import {
   FilesInterceptor,
 } from '@nestjs/platform-express';
 import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
-import { EnhanceFileInterceptor } from '@core/interceptors/enhance-file.interceptor';
+import { EnhanceFileInterceptor } from '@core/interceptors/enhanceFile';
 import { MargeFilesToBodyPipe } from '@core/pipes/marge-files-to-body.pipe';
 import { GenerateMultiFields } from '~helpers/generate-multi-fields';
+import { diskStorage } from 'multer';
+import { Request } from 'express';
 // import { User } from '~decorators/request-user.decorator';
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];
@@ -84,7 +86,7 @@ export class ProductController {
   }
 
   static multiFields = new GenerateMultiFields([
-    { name: 'multi1', maxCount: 2 },
+    { name: 'multi1', maxCount: 2, fileTypes: VALID_UPLOADS_MIME_TYPES},
     { name: 'multi2', maxCount: 2, required: false },
   ], true)
   @Post('create-multi')
@@ -102,11 +104,11 @@ export class ProductController {
     @UploadedFiles(
       FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
-        fileIsRequired: ProductController.multiFields.fieldNames,
+        fileIsRequired: ProductController.multiFields.requiredFieldNames,
       }),
     ) files: Record<string, Express.Multer.File[]>,
   ) {
-    console.log('CONTROLLER(product/create/multi)', files);
+    console.log('CONTROLLER(product/create/multi)', files, ProductController.multiFields);
     return files;
   }
 
@@ -115,11 +117,47 @@ export class ProductController {
     EnhanceFileInterceptor(
       AnyFilesInterceptor,
       {
-        limits: {
-          files: 6,
-        },
+        // limits: {
+        //   files: 6,
+        // },'
         dest: 'public/uploads/products/any',
-        errorFieldname: 'anyFiles',
+        // asyncSaveFiles: true,
+        field: [
+          { //* images[0][files], images[1][files]
+            key: 'images',
+            length: Infinity,
+            required: true,
+            nestedField: {
+              name: 'files',
+              maxCount: 4,
+            },
+          },
+          { //* a[0][b][0][c], a[1][b][0][c], a[0][b][1][c], a[1][b][1][c]
+            key: 'a',
+            length: 2,
+            required: true,
+            nestedField: {
+              key: 'b',
+              length: 2,
+              nestedField: {
+                name: 'c',
+                maxCount: 3,
+              },
+            },
+          },
+          { //* a[b][0][c], a[b][1][c],
+            key: 'a',
+            required: false,
+            nestedField: {
+              key: 'b',
+              length: 2,
+              nestedField: {
+                name: 'c',
+                maxCount: 3,
+              },
+            },
+          },
+        ]
       },
     ),
   )
@@ -127,7 +165,7 @@ export class ProductController {
     @UploadedFiles(
       FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
-        fileIsRequired: true,
+        // fileIsRequired: false,
       }),
     ) files: any,
     @Body() body: any,
@@ -137,6 +175,11 @@ export class ProductController {
   }
 
   static nestedFields = new GenerateMultiFields([
+    // {
+    //   required: true,
+    //   name: 'files',
+    //   maxCount: 4,
+    // },
     { //* images[0][files], images[1][files]
       key: 'images',
       length: 2,
@@ -148,11 +191,11 @@ export class ProductController {
     { //* a[0][b][0][c], a[1][b][0][c], a[0][b][1][c], a[1][b][1][c]
       key: 'a',
       length: 2,
+      required: false,
       nestedField: {
         key: 'b',
         length: 2,
         nestedField: {
-          required: false,
           name: 'c',
           maxCount: 3,
         },
@@ -160,17 +203,17 @@ export class ProductController {
     },
     { //* a[b][0][c], a[b][1][c],
       key: 'a',
+      required: false,
       nestedField: {
         key: 'b',
         length: 2,
         nestedField: {
-          required: false,
           name: 'c',
           maxCount: 3,
         },
       },
     },
-  ], true)
+  ], {withRequiredFieldNames: true})
   @Post('nested')
   @UseInterceptors(
     EnhanceFileInterceptor(
@@ -190,11 +233,10 @@ export class ProductController {
     @UploadedFiles(
       FileValidationPipe({
         fileType: VALID_UPLOADS_MIME_TYPES,
-        fileIsRequired: ProductController.nestedFields.fieldNames,
+        fileIsRequired: ProductController.nestedFields.requiredFieldNames,
       }),
     ) files: any,
   ) {
-    console.log(ProductController.nestedFields.fieldNames)
     console.log(ProductController.nestedFields)
     console.log(JSON.stringify({ files, body }, null, 2));
   }

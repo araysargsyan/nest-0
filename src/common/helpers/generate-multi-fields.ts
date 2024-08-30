@@ -1,26 +1,41 @@
-import { isArray } from 'class-validator';
 import { isUndefined } from '@nestjs/common/utils/shared.utils';
-import { MulterField } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
-import { TNestedMulterField } from '../types';
+import { isBoolean } from 'class-validator';
+import { TNestedMulterField } from '@core/interceptors/enhanceFile';
+import { Field } from 'multer';
 
-export class GenerateMultiFields<T extends boolean = false> {
-  public fields: MulterField[] = []
-  public fieldNames?: string[]
+export class GenerateMultiFields {
+  public fields: Field[] = [];
+  public requiredFieldNames?: string[];
+  public fileTypes?: Record<string, string[]>;
 
   constructor(
     nestedFields: TNestedMulterField[],
-    private withFieldNames: T = false as T,
+    private readonly options: {
+      withRequiredFieldNames?: true,
+      withFileTypes?: true
+    } | boolean = false,
   ) {
-    if(withFieldNames) {
-      this.fieldNames = []
+    if (isBoolean(options) ? options : options.withRequiredFieldNames) {
+      this.requiredFieldNames = [];
     }
-    if (isArray(nestedFields)) {
-      nestedFields.forEach((field) => this.generateNestedField(field));
+    if (isBoolean(options) ? options : options.withFileTypes) {
+      this.fileTypes = {};
     }
+
+    nestedFields.forEach((field) => this.generateNestedField(field));
   }
 
-  private generateNestedField(field: TNestedMulterField, parentKey = '') {
-    const nestedFields = []
+  private generateNestedField(field: TNestedMulterField, parentKey = '', isRequired = false) {
+    const nestedFields = [];
+    let shouldBeRequired = isRequired
+
+    if(!parentKey) {
+      if ((isUndefined(field.required) || field.required)
+        && (isBoolean(this.options) ? this.options : this.options.withRequiredFieldNames)
+      ) {
+        shouldBeRequired = true
+      }
+    }
 
     if ('nestedField' in field) {
       if ('length' in field) {
@@ -29,33 +44,37 @@ export class GenerateMultiFields<T extends boolean = false> {
             ? `${parentKey}[${field.key}][${i}]`
             : `${parentKey}${field.key}[${i}]`;
           this.fields.push(
-            ...this.generateNestedField(field.nestedField, keyPrefix),
+            ...this.generateNestedField(field.nestedField, keyPrefix, shouldBeRequired),
           );
         }
       } else {
         const keyPrefix = `${parentKey}${field.key}`;
         this.fields.push(
-          ...this.generateNestedField(field.nestedField, keyPrefix),
+          ...this.generateNestedField(field.nestedField, keyPrefix, shouldBeRequired),
         );
       }
     } else {
-      const newNestedField: MulterField = {
-        name:parentKey
+      const newNestedField: Field = {
+        name: parentKey
           ? `${parentKey}[${field.name}]`
-          : `${parentKey}${field.name}`
+          : `${parentKey}${field.name}`,
       };
 
-      if(field.maxCount) {
+      if (field.maxCount) {
         newNestedField.maxCount = field.maxCount;
       }
 
       (parentKey ? nestedFields : this.fields).push(newNestedField);
-
-      if (this.withFieldNames && (isUndefined(field.required) || field.required)) {
-        this.fieldNames.push(newNestedField.name);
+      if(field.fileTypes
+        && (isBoolean(this.options) ? this.options : this.options.withFileTypes)
+      ) {
+        this.fileTypes[newNestedField.name] = field.fileTypes
+      }
+      if(shouldBeRequired) {
+        this.requiredFieldNames.push(newNestedField.name);
       }
     }
 
-    return nestedFields
+    return nestedFields;
   };
 }
