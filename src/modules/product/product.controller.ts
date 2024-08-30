@@ -25,8 +25,6 @@ import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 import { EnhanceFileInterceptor } from '@core/interceptors/enhanceFile';
 import { MargeFilesToBodyPipe } from '@core/pipes/marge-files-to-body.pipe';
 import { GenerateMultiFields } from '~helpers/generate-multi-fields';
-import { diskStorage } from 'multer';
-import { Request } from 'express';
 // import { User } from '~decorators/request-user.decorator';
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];

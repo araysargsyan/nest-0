@@ -175,6 +175,10 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
               buffer,
             );
           }
+
+          const oldPath = file.path;
+          const newPath = `${oldPath}.${file.ext}`;
+          file.path = newPath;
           return this.renameFile(oldPath, newPath);
         });
 

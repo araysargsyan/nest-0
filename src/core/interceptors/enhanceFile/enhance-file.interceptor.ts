@@ -15,7 +15,7 @@ import {
   FileInterceptor,
   FilesInterceptor,
 } from '@nestjs/platform-express';
-import e, { Request } from 'express';
+import { Request } from 'express';
 import { MulterField, MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -183,29 +183,35 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
     // }
 
     private async asyncSaveFiles(context: ExecutionContext) {
-      const request = context.switchToHttp().getRequest()
-      const files = request.files
+      const request = context.switchToHttp().getRequest();
+      const files = request.files;
       const storage = options.storage || diskStorage({
         destination: options.dest as string,
         filename(
-          req: Request,
+          _: Request,
           file: Express.Multer.File,
-          callback: (error: (Error | null), filename: string) => void
+          callback: (error: (Error | null), filename: string) => void,
         ) {
-          callback(null, file.filename)
-        }
-      })
+          callback(null, file.filename);
+        },
+      });
 
       for (const file of files) {
-        const filename = uuidv4()
-        file.filename = filename
+        const filename = uuidv4();
+        file.filename = filename;
         file.path = `${options.dest}/${filename}`.replace(/\//g, '\\');
         file.stream = Readable.from(file.buffer);
         await new Promise((resolve, reject) => {
-          storage._handleFile(request, { ...file }, async (error, info) => {
-            console.log(7777, { error, info });
-            resolve(info)
-          });
+          storage._handleFile(
+            request,
+            { ...file },
+            (error: any, info: Partial<Express.Multer.File>) => {
+              if (error) {
+                return reject(error);
+              }
+
+              resolve(info);
+            });
         });
 
         delete file.buffer;
