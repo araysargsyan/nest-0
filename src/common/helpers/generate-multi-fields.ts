@@ -1,5 +1,4 @@
 import { isUndefined } from '@nestjs/common/utils/shared.utils';
-import { isBoolean } from 'class-validator';
 import { TNestedMulterField } from '@core/interceptors/enhanceFile';
 import { EnhanceMulterOptions } from '@core/interceptors/enhanceFile/types';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
