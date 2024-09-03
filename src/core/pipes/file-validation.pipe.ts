@@ -19,14 +19,20 @@ import { Request } from 'express';
 import { unlink, rename, mkdir, writeFile } from 'fs';
 import { BODY_ERRORED, FILE_METADATA } from '~constants/core.const';
 import { dirname } from 'path';
+import until from '~util/wait';
 
 
-export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: IFileValidationPipeOptions) => {
+export const FileValidationPipe = (
+  {
+    fileTypes = null,
+    fileIsRequired = true,
+  }: IFileValidationPipeOptions,
+) => {
   @Injectable()
   class Pipe implements PipeTransform {
     public logger = new Logger('FileValidationPipe');
     public readonly fileIsRequired: IFileValidationPipeOptions['fileIsRequired'];
-    public readonly fileType: IFileValidationPipeOptions['fileType'];
+    public readonly fileTypes: IFileValidationPipeOptions['fileTypes'];
     public readonly parseFilePipe: ParseFilePipeBuilder = new ParseFilePipeBuilder();
 
 
@@ -34,7 +40,7 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       @Inject(REQUEST) readonly request: Request,
     ) {
       this.fileIsRequired = fileIsRequired;
-      this.fileType = fileType;
+      this.fileTypes = fileTypes;
     }
 
     async transform(
@@ -51,9 +57,9 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
         } = Reflect.getMetadata(FILE_METADATA, this.request.route);
         Reflect.defineMetadata(FILE_METADATA, fileMetadata, metadata.metatype);
         this.logger.debug(`Start... \n ${JSON.stringify({
-          fileIsRequired: this.fileIsRequired,
+          fileIsRequired,
           isRequired,
-          fileType: this.fileType,
+          fileTypes,
           fileMetadata,
         }, null, 2)}`);
 
@@ -94,35 +100,18 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
 
         if (isMulti) {
           let hasError = false;
-          let checkedChunksCount = 0;
 
-          return Promise.all(Object.keys(value).map((key) => {
-            this.logger.infoMessage(`[MULTI SCENARIO]: START... {key=${key}}`);
-
-            return pipe.transform(value?.[key]).then((data) => {
+          return Promise.all(Object.keys(value).map(async (key) => {
+            try {
+              const data = await pipe.transform(value?.[key]);
               this.logger.infoMessage(`[MULTI SCENARIO]: SUCCESS ${JSON.stringify({
                 key, data,
               }, null, 2)}`);
               return { [key]: data };
-            }).catch((error) => {
+            } catch (error) {
               this.logger.warn(`[MULTI SCENARIO]: ERROR {key=${key}}`);
-              if (!hasError) {
-                hasError = true;
-              }
-
               return this.createError(key)(error);
-            }).finally(() => {
-              checkedChunksCount++;
-              if (checkedChunksCount === Object.keys(value).length) {
-                this.logger.infoMessage(`[MULTI SCENARIO]: FINISH. {hasError=${hasError}, key=${key}}`);
-                const isBodyErrored = this.checkBodyError(metadata.metatype);
-                if (hasError || isBodyErrored) {
-                  this.removeFiles(Object.values(value).flat(Infinity));
-                } else {
-                  this.renameOrCrateFiles(Object.values(value).flat(Infinity));
-                }
-              }
-            });
+            }
           })).then((data) => {
             this.logger.infoMessage('[MULTI SCENARIO]: PROMISE ALL RESOLVE');
             let files = {};
@@ -133,7 +122,18 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
             return files;
           }).catch((err) => {
             this.logger.warn('[MULTI SCENARIO]: PROMISE ALL REJECT');
+            if (!hasError) {
+              hasError = true;
+            }
             throw err;
+          }).finally(() => {
+            this.logger.infoMessage(`[MULTI SCENARIO]: FINISH. {hasError=${hasError}`);
+            const isBodyErrored = this.checkBodyError(metadata.metatype);
+            if (hasError || isBodyErrored) {
+              this.removeFiles(Object.values(value).flat(Infinity));
+            } else {
+              this.renameOrCrateFiles(Object.values(value).flat(Infinity));
+            }
           });
         }
 
@@ -166,14 +166,19 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
       Reflect.deleteMetadata(FILE_METADATA, this.request.route);
       if (isArray(files)) {
         const promises = files.map(file => {
-          if (file.dest && file.buffer) {
-            const buffer = file.buffer
-            delete file.buffer
+          if (file.destination && file.buffer) {
+            const buffer = file.buffer;
+            delete file.buffer;
+            file.path = `${file.destination}\\${file.filename}.${file.ext}`;
 
             return this.createFile(
-              `${file.dest}\\${file.filename}.${file.ext}`,
+              file.path,
               buffer,
             );
+          }
+
+          if (!file.path) {
+            return;
           }
 
           const oldPath = file.path;
@@ -184,16 +189,21 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
 
         return Promise.all(promises);
       }
-      const oldPath = files.path;
-      const newPath = `${oldPath}.${files.ext}`;
-      files.path = newPath;
-      return this.renameFile(oldPath, newPath);
+      if (files.path) {
+        const oldPath = files.path;
+        const newPath = `${oldPath}.${files.ext}`;
+        files.path = newPath;
+        return this.renameFile(oldPath, newPath);
+      }
     }
 
     public removeFiles(files: Express.Multer.File | Express.Multer.File[]) {
       Reflect.deleteMetadata(FILE_METADATA, this.request.route);
       if (isArray(files)) {
-        return Promise.all(files.map(file => this.removeFile(file.path)));
+        return Promise.all(files.map(file => file.path ?
+          this.removeFile(file.path)
+          : false,
+        ));
       }
 
       return this.removeFile(files.path);
@@ -270,7 +280,6 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
 
     public createError(defaultFieldname?: string) {
       return (error) => {
-        console.log(111, error);
         this.logger.error(`CATCHING ERROR ${JSON.stringify({ defaultFieldname }, null, 2)}`);
         let erroredFieldname = defaultFieldname;
         let errorResponseMessage = error.message;
@@ -286,10 +295,6 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
             errorResponseMessage,
           ],
         };
-
-        if (erroredFieldname.includes('[')) {
-          // errorResponse = {}
-        }
 
         const errorMessage = error.response?.error;
         error.response = errorResponse;
@@ -333,17 +338,14 @@ export const FileValidationPipe = ({ fileType = null, fileIsRequired = true }: I
         fileIsRequired,
       };
 
-      if (this.fileType) {
-        const validator = new UploadFileTypeValidator(
-          { fileType: this.fileType },
-        );
+      const validator = new UploadFileTypeValidator(
+        { fileTypes: this.fileTypes },
+      );
 
-        return this.parseFilePipe
-          .addValidator(validator)
-          .build(additionalOptions);
-      }
+      return this.parseFilePipe
+        .addValidator(validator)
+        .build(additionalOptions);
 
-      return this.parseFilePipe.build(additionalOptions);
     }
   }
 

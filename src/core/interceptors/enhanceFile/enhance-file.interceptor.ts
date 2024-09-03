@@ -135,10 +135,28 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
           },
         );
       } else if (fileInterceptor.name === 'FileFieldsInterceptor') {
+        const fields: Record<string, EnhanceMulterOptions<typeof FileFieldsInterceptor>['field'][0]> = {} as never
+        (field as EnhanceMulterOptions<typeof FileFieldsInterceptor>['field'])
+          .forEach(f => fields[f.name] = f)
         interceptor = (fileInterceptor as typeof FileFieldsInterceptor)(
           field as MulterField[],
           {
             ...localOptions,
+            fileFilter: (
+              req: Request,
+              file: Express.Multer.File,
+              callback: (error: (Error | null), acceptFile: boolean) => void
+            ) => {
+              if(fields[file.fieldname]?.fileTypes) {
+                file.fileTypes = fields[file.fieldname].fileTypes
+              }
+
+              if(localOptions.fileFilter) {
+                localOptions.fileFilter(req, file, callback)
+              } else {
+                callback(null, true)
+              }
+            },
             limits: {
               ...localOptions.limits,
               //? files: what?
@@ -146,11 +164,13 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
           },
         );
       } else if (fileInterceptor.name === 'AnyFilesInterceptor') {
-        const { dest: _, storage, ...localOptionsWithoutStore } = localOptions;
+        const localOptionsWithoutStore = { ...localOptions };
+        delete localOptionsWithoutStore.storage
+        delete localOptionsWithoutStore.dest
         const interceptorOptions = !field ? localOptions : {
           ...localOptionsWithoutStore,
           fileFilter: (
-            _: Request,
+            req: Request,
             file: Express.Multer.File,
             callback: (error: (Error | null), acceptFile: boolean) => void,
           ): void => {
@@ -165,7 +185,11 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
               return;
             }
 
-            callback(null, true);
+            if(localOptions.fileFilter) {
+              localOptions.fileFilter(req, file, callback)
+            } else {
+              callback(null, true);
+            }
           },
         };
         interceptor = (fileInterceptor as typeof AnyFilesInterceptor)(interceptorOptions);
@@ -355,6 +379,9 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
         this.logger.infoMessage('FINISH FIELD CHECK');
         this.logger.info({ result, field, fieldname: file.fieldname });
         if (result.isValid) {
+          if(field.fileTypes) {
+            file.fileTypes = field.fileTypes;
+          }
           this.logger.infoMessage(`VALID FILE field=${JSON.stringify(field, null, 2)}`);
           return result;
         }
@@ -448,7 +475,7 @@ export function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterce
             if (!file.filename) {
               file.filename = uuidv4();
               if (dest) {
-                file.dest = (dest as string).replace(/\//g, '\\');
+                file.destination = (dest as string).replace(/\//g, '\\');
               }
             }
           });

@@ -51,7 +51,7 @@ export class ProductController {
     // @User('id') userId: number,
     @UploadedFiles(
       FileValidationPipe({
-        fileType: VALID_UPLOADS_MIME_TYPES,
+        fileTypes: VALID_UPLOADS_MIME_TYPES,
         fileIsRequired: true,
       }),
       MargeFilesToBodyPipe('path'),
@@ -75,7 +75,7 @@ export class ProductController {
     @Body() { productId }: CreateProductDocumentDto,
     @UploadedFile(
       FileValidationPipe({
-        fileType: VALID_UPLOADS_MIME_TYPES,
+        fileTypes: VALID_UPLOADS_MIME_TYPES,
       }),
     ) document: Express.Multer.File,
   ) {
@@ -101,7 +101,7 @@ export class ProductController {
   createMulti(
     @UploadedFiles(
       FileValidationPipe({
-        fileType: VALID_UPLOADS_MIME_TYPES,
+        fileTypes: ['audio/mpeg'],
         fileIsRequired: ProductController.multiFields.requiredFieldNames,
       }),
     ) files: Record<string, Express.Multer.File[]>,
@@ -125,6 +125,7 @@ export class ProductController {
             key: 'images',
             length: Infinity,
             required: true,
+            fileTypes: VALID_UPLOADS_MIME_TYPES, //! IF DEFINED, THEN FILE_PIPE fileTypes WILL BE IGNORED FOR THIS FIELD
             nestedField: {
               name: 'files',
               maxCount: 4,
@@ -162,8 +163,8 @@ export class ProductController {
   createAny(
     @UploadedFiles(
       FileValidationPipe({
-        fileType: VALID_UPLOADS_MIME_TYPES,
-        // fileIsRequired: false,
+        fileTypes: ['audio/mpeg'],
+        fileIsRequired: true, //! WILL CHECK ONLY NOT EMPTY FILES ARRAY
       }),
     ) files: any,
     @Body() body: any,
@@ -179,6 +180,7 @@ export class ProductController {
     //   maxCount: 4,
     // },
     { //* images[0][files], images[1][files]
+      fileTypes: VALID_UPLOADS_MIME_TYPES,
       key: 'images',
       length: 2,
       nestedField: {
@@ -211,7 +213,7 @@ export class ProductController {
         },
       },
     },
-  ], {withRequiredFieldNames: true})
+  ], true)
   @Post('nested')
   @UseInterceptors(
     EnhanceFileInterceptor(
@@ -230,7 +232,7 @@ export class ProductController {
     @Body() body: any,
     @UploadedFiles(
       FileValidationPipe({
-        fileType: VALID_UPLOADS_MIME_TYPES,
+        fileTypes: ['audio/mpeg'],
         fileIsRequired: ProductController.nestedFields.requiredFieldNames,
       }),
     ) files: any,

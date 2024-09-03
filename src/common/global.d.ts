@@ -13,7 +13,7 @@ declare namespace Express {
     interface File {
       ext?: string;
       fieldsMap?: Array<string | number>;
-      dest?: string;
+      fileTypes?: string[];
     }
   }
 }
