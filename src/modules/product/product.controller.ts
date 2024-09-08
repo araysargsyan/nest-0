@@ -25,6 +25,7 @@ import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
 import { EnhanceFileInterceptor } from '@core/interceptors/enhanceFile';
 import { MargeFilesToBodyPipe } from '@core/pipes/marge-files-to-body.pipe';
 import { GenerateMultiFields } from '~helpers/generate-multi-fields';
+import { NestedFilesInterceptor } from '@core/interceptors/NestedFilesInterceptor';
 // import { User } from '~decorators/request-user.decorator';
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];
@@ -110,15 +111,15 @@ export class ProductController {
     return files;
   }
 
-  @Post('any')
+  @Post('nested')
   @UseInterceptors(
     EnhanceFileInterceptor(
-      AnyFilesInterceptor,
+      NestedFilesInterceptor,
       {
         // limits: {
         //   files: 6,
         // },'
-        dest: 'public/uploads/products/any',
+        dest: 'public/uploads/products/nested',
         // asyncSaveFiles: true,
         field: [
           { //* images[0][files], images[1][files]
@@ -160,7 +161,7 @@ export class ProductController {
       },
     ),
   )
-  createAny(
+  createNested(
     @UploadedFiles(
       FileValidationPipe({
         fileTypes: ['audio/mpeg'],
@@ -173,12 +174,7 @@ export class ProductController {
     return files;
   }
 
-  static nestedFields = new GenerateMultiFields([
-    // {
-    //   required: true,
-    //   name: 'files',
-    //   maxCount: 4,
-    // },
+  static multiNestedFields = new GenerateMultiFields([
     { //* images[0][files], images[1][files]
       fileTypes: VALID_UPLOADS_MIME_TYPES,
       key: 'images',
@@ -214,17 +210,14 @@ export class ProductController {
       },
     },
   ], true)
-  @Post('nested')
+  @Post('multi-nested')
   @UseInterceptors(
     EnhanceFileInterceptor(
       FileFieldsInterceptor,
       {
-        field: ProductController.nestedFields.fields,
-        dest: 'public/uploads/products/nested',
+        field: ProductController.multiNestedFields.fields,
+        dest: 'public/uploads/products/multi_nested',
         errorFieldname: 'nestedMultiFiles',
-        // limits: {
-        //   fileSize: 1
-        // }
       },
     ),
   )
@@ -233,11 +226,10 @@ export class ProductController {
     @UploadedFiles(
       FileValidationPipe({
         fileTypes: ['audio/mpeg'],
-        fileIsRequired: ProductController.nestedFields.requiredFieldNames,
+        fileIsRequired: ProductController.multiNestedFields.requiredFieldNames,
       }),
     ) files: any,
   ) {
-    console.log(ProductController.nestedFields)
     console.log(JSON.stringify({ files, body }, null, 2));
   }
 

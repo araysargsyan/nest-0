@@ -1,7 +1,7 @@
 import { isUndefined } from '@nestjs/common/utils/shared.utils';
-import { TNestedMulterField } from '@core/interceptors/enhanceFile';
 import { EnhanceMulterOptions } from '@core/interceptors/enhanceFile/types';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { TNestedMulterField } from '@core/interceptors/nestedFilesInterceptor';
 
 export class GenerateMultiFields {
   public fields: EnhanceMulterOptions<typeof FileFieldsInterceptor>['field'] = [];

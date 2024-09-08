@@ -3,16 +3,16 @@ import { promises } from 'fs';
 import { Logger } from '~logger/Logger';
 // import * as fileType from 'file-type-mime';
 import { isUndefined } from '@nestjs/common/utils/shared.utils';
-import { TUploadTypeValidatorOptions } from '../types';
+import { IFileValidationPipeOptions } from '../types';
 
 
 export class UploadFileTypeValidator extends FileValidator {
   private readonly logger = new Logger('UploadFileTypeValidator');
 
   constructor(
-    protected readonly validationOptions: TUploadTypeValidatorOptions = { fileTypes: [] },
+    protected readonly fileTypes: IFileValidationPipeOptions['fileTypes'] = [],
   ) {
-    super(validationOptions);
+    super({ fileTypes });
   }
 
   public async isValid(file: Express.Multer.File): Promise<boolean> {

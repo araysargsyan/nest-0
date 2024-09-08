@@ -11,6 +11,3 @@ export type TFileValidationPipeValue = Express.Multer.File
   | Express.Multer.File[]
   | Record<string, Express.Multer.File[]>
   | undefined
-
-export type TUploadTypeValidatorOptions = Required<Pick<IFileValidationPipeOptions, 'fileTypes'>>
-

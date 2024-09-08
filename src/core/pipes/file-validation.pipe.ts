@@ -7,12 +7,12 @@ import {
   ParseFilePipe,
   ParseFilePipeBuilder,
   PipeTransform,
+  Type,
 } from '@nestjs/common';
 import { isArray, isObject } from 'class-validator';
 import { IFileValidationPipeOptions, TFileValidationPipeValue } from './types';
 import { UploadFileTypeValidator } from './validators/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
-import { ParseFileOptions } from '@nestjs/common/pipes/file/parse-file-options.interface';
 import { Logger } from '~logger/Logger';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
@@ -26,21 +26,15 @@ export const FileValidationPipe = (
     fileTypes = null,
     fileIsRequired = true,
   }: IFileValidationPipeOptions,
-) => {
+): Type<PipeTransform> => {
   @Injectable()
   class Pipe implements PipeTransform {
-    public logger = new Logger('FileValidationPipe');
-    public readonly fileIsRequired: IFileValidationPipeOptions['fileIsRequired'];
-    public readonly fileTypes: IFileValidationPipeOptions['fileTypes'];
-    public readonly parseFilePipe: ParseFilePipeBuilder = new ParseFilePipeBuilder();
-
+    private logger = new Logger('FileValidationPipe');
+    private readonly parseFilePipe: ParseFilePipeBuilder = new ParseFilePipeBuilder();
 
     constructor(
       @Inject(REQUEST) readonly request: Request,
-    ) {
-      this.fileIsRequired = fileIsRequired;
-      this.fileTypes = fileTypes;
-    }
+    ) {}
 
     async transform(
       value: TFileValidationPipeValue,
@@ -49,7 +43,7 @@ export const FileValidationPipe = (
       let pipe: ParseFilePipe;
 
       if (metadata.type === 'custom') {
-        const isRequired = isArray(this.fileIsRequired) ? Boolean(this.fileIsRequired.length) : this.fileIsRequired;
+        const isRequired = isArray(fileIsRequired) ? Boolean(fileIsRequired.length) : fileIsRequired;
         const fileMetadata: undefined | {
           isMulti?: boolean;
           fieldname?: string;
@@ -161,7 +155,7 @@ export const FileValidationPipe = (
       }
     }
 
-    public renameOrCrateFiles(files: Express.Multer.File | Express.Multer.File[]) {
+    private renameOrCrateFiles(files: Express.Multer.File | Express.Multer.File[]) {
       Reflect.deleteMetadata(FILE_METADATA, this.request.route);
       if (isArray(files)) {
         const promises = files.map(file => {
@@ -196,7 +190,7 @@ export const FileValidationPipe = (
       }
     }
 
-    public removeFiles(files: Express.Multer.File | Express.Multer.File[]) {
+    private removeFiles(files: Express.Multer.File | Express.Multer.File[]) {
       Reflect.deleteMetadata(FILE_METADATA, this.request.route);
       if (isArray(files)) {
         return Promise.all(files.map(file => file.path ?
@@ -208,7 +202,7 @@ export const FileValidationPipe = (
       return this.removeFile(files.path);
     }
 
-    public checkBodyError(metatype: ArgumentMetadata['metatype']) {
+    private checkBodyError(metatype: ArgumentMetadata['metatype']) {
       const isBodyErrored = Boolean(Reflect.getMetadata(BODY_ERRORED, metatype));
       this.logger.infoMessage(`isBodyErrored=${isBodyErrored}`);
       if (isBodyErrored) {
@@ -218,7 +212,7 @@ export const FileValidationPipe = (
       return isBodyErrored;
     }
 
-    public removeFile(path: string) {
+    private removeFile(path: string) {
       if (Boolean(path)) {
         unlink(path, (err) => {
           if (!err) {
@@ -230,7 +224,7 @@ export const FileValidationPipe = (
       }
     }
 
-    public renameFile(oldPath: string, newPath: string) {
+    private renameFile(oldPath: string, newPath: string) {
       if (Boolean(oldPath)) {
         rename(oldPath, newPath, (err) => {
           if (!err) {
@@ -242,7 +236,7 @@ export const FileValidationPipe = (
       }
     }
 
-    public createFile(path: string, data: string | Buffer): Promise<string> {
+    private createFile(path: string, data: string | Buffer): Promise<string> {
       return new Promise((resolve, reject) => {
         mkdir(dirname(path), { recursive: true }, (mkdirErr) => {
           if (mkdirErr) {
@@ -263,22 +257,22 @@ export const FileValidationPipe = (
       });
     }
 
-    public isMulti(value: TFileValidationPipeValue) {
+    private isMulti(value: TFileValidationPipeValue) {
       if (isObject(value)) {
         for (const key of Object.keys(value)) {
           if (isArray(value[key])) {
             return true;
           }
         }
-      } else if (isArray(this.fileIsRequired) && !value) {
+      } else if (isArray(fileIsRequired) && !value) {
         return true;
       }
 
       return false;
     }
 
-    public createError(defaultFieldname?: string) {
-      return (error) => {
+    private createError(defaultFieldname?: string) {
+      return (error: any) => {
         this.logger.error(`CATCHING ERROR ${JSON.stringify({ defaultFieldname }, null, 2)}`);
         let erroredFieldname = defaultFieldname;
         let errorResponseMessage = error.message;
@@ -304,23 +298,23 @@ export const FileValidationPipe = (
     }
 
     //! returning null when all required fields are exists
-    public getMissingRequiredField(
+    private getMissingRequiredField(
       value: TFileValidationPipeValue,
       isMulti: boolean,
       fieldname: string | undefined,
     ) {
-      if (this.fileIsRequired) {
+      if (fileIsRequired) {
         const isEmptyValue = (!value
           || (isArray(value) && !value.length)
           || (isObject(value) && !Object.keys(value).length)
         );
 
         if (isEmptyValue) {
-          return isArray(this.fileIsRequired) ? this.fileIsRequired[0] || null : fieldname;
+          return isArray(fileIsRequired) ? fileIsRequired[0] || null : fieldname;
         }
 
-        if (isMulti && isArray(this.fileIsRequired)) {
-          for (const key of this.fileIsRequired) {
+        if (isMulti && isArray(fileIsRequired)) {
+          for (const key of fileIsRequired) {
             if (!value[key]) {
               return key;
             }
@@ -331,20 +325,15 @@ export const FileValidationPipe = (
       return null;
     }
 
-    public generatePipe(errorHttpStatusCode: ErrorHttpStatusCode, fileIsRequired: boolean): ParseFilePipe {
-      const additionalOptions: Omit<ParseFileOptions, 'validators'> = {
-        errorHttpStatusCode,
-        fileIsRequired,
-      };
-
-      const validator = new UploadFileTypeValidator(
-        { fileTypes: this.fileTypes },
-      );
-
+    private generatePipe(errorHttpStatusCode: ErrorHttpStatusCode, fileIsRequired: boolean): ParseFilePipe {
       return this.parseFilePipe
-        .addValidator(validator)
-        .build(additionalOptions);
-
+        .addValidator(
+          new UploadFileTypeValidator(fileTypes),
+        )
+        .build({
+          errorHttpStatusCode,
+          fileIsRequired,
+        });
     }
   }
 
