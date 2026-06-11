@@ -38,6 +38,7 @@ import { JwtAccessAuthGuard } from '@core/guards/jwt-access.guard';
 import { JwtRefreshAuthGuard } from '@core/guards/jwt-refresh.guard';
 import { REFRESH_TOKEN } from '~/constants/auth.const';
 import { JWT } from '~/constants/global.const';
+import { AllowExpiredAccess } from '~/decorators/allow-expired-access.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -69,6 +70,7 @@ export class AuthController {
 
   @Get('sign-out')
   @UseGuards(JwtAccessAuthGuard)
+  @AllowExpiredAccess()
   @HttpCode(HttpStatus.OK)
   logout(@Req() { user, res }: Request) {
     console.log('CONTROLLER->logout');

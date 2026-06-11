@@ -6,10 +6,13 @@ import { JWT } from '~constants/global.const';
 import { JWT_ACCESS_STRATEGY, REFRESH_TOKEN } from '~constants/auth.const';
 import { Request, Response } from 'express';
 import { AuthService } from '@modules/shared/auth';
+import { Reflector } from '@nestjs/core';
+import { ALLOW_EXPIRED_ACCESS_KEY } from '~decorators/allow-expired-access.decorator';
 
 @Injectable()
 export class JwtAccessAuthGuard extends AuthGuard(JWT_ACCESS_STRATEGY) {
   constructor(
+    private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
@@ -22,7 +25,8 @@ export class JwtAccessAuthGuard extends AuthGuard(JWT_ACCESS_STRATEGY) {
 
     if (err || !user) {
       const handler = context.getHandler();
-      if (handler.name === 'logout') {
+      const allowExpired = this.reflector.get<boolean>(ALLOW_EXPIRED_ACCESS_KEY, handler);
+      if (allowExpired) {
         const req = context.switchToHttp().getRequest<Request>();
         const refreshToken = req.cookies.refreshToken;
         if (!refreshToken) {
