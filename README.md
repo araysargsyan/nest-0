@@ -59,17 +59,37 @@ Shared logic, definitions, and custom decorators used across all modules.
 ### 5.1 Custom Decorators Deep-Dive
 - **`@IsUnique(serviceMethod)`**: The core of our async validation. It marks a field for a database check.
   ```typescript
-  @IsUnique('isEmailUnique') // Calls UserService.isEmailUnique
-  email: string;
+  export class SignUpDto {
+    @IsUnique('isEmailUnique') // Calls UserService.isEmailUnique
+    email: string;
+  }
   ```
 - **`@Public()`**: A metadata decorator that tells guards to skip authentication for a specific route.
+  ```typescript
+  @Public()
+  @Get('check-status')
+  async checkStatus() {
+    return { status: 'OK' };
+  }
+  ```
 - **`@User(key?)`**: Type-safe extraction of the user payload from the request.
   ```typescript
   @Get('me')
-  async me(@User('id') userId: number) { return userId; }
+  @UseGuards(JwtAccessAuthGuard)
+  async me(@User('id') userId: number) { 
+    return userId; 
+  }
   ```
 - **`@ValidatorOptions(options)`**: Per-DTO customization for `class-validator`.
     - **Skip Validation**: If you pass `null` (e.g., `@ValidatorOptions(null)`), validation for that DTO will be skipped entirely.
+    ```typescript
+    @ValidatorOptions({ 
+      whitelist: true, 
+      forbidNonWhitelisted: true,
+      stopAtFirstError: true 
+    })
+    export class CreateProductDto { ... }
+    ```
 
 ### 5.2 Constants (`src/common/constants/`)
 Centralized definitions to ensure type safety and consistency:
@@ -79,6 +99,16 @@ Centralized definitions to ensure type safety and consistency:
 
 ### 5.3 Constraints (`src/common/constraints/`)
 - **`UniqueConstraint`**: The implementation of the `@IsUnique` logic. It uses `Reflect.metadata` to identify "pending" validation states and dynamically invokes the specified service method to verify data against the database.
+- **Provider Registration**: To enable Dependency Injection (DI) within the constraint, it must be provided in the module:
+  ```typescript
+  @Module({
+    providers: [
+      UserService,
+      createUniqueConstraintProvider(UserService),
+    ],
+  })
+  export class UserModule {}
+  ```
 
 ### 5.4 Custom Logger
 Enhanced `Logger` class using `chalk` for colorized console output.
@@ -99,8 +129,24 @@ The architectural heart of Nest-0, implementing security, complex parsing, and t
 Nest-0 implements a secure, session-based JWT authentication system with **hashed Refresh Tokens** and **HttpOnly Cookies**.
 - **`JwtAccessAuthGuard`**: 
     - Protects routes using the `AccessStrategy` (Bearer Token).
+    - **Usage Example**:
+      ```typescript
+      @Get('profile')
+      @UseGuards(JwtAccessAuthGuard)
+      async getProfile(@User() user: ITokenPayload) {
+        return user;
+      }
+      ```
     - **Specialized Logout Logic**: If the Access Token is expired, the guard specifically checks the `refreshToken` cookie for the `logout` endpoint. If valid, it allows the user to proceed so they can be signed out from the database.
 - **`JwtRefreshAuthGuard`**: Uses the `RefreshStrategy` to extract tokens exclusively from secure cookies.
+    - **Usage Example**: Typically used only for the token rotation endpoint.
+      ```typescript
+      @Get('refresh')
+      @UseGuards(JwtRefreshAuthGuard)
+      async refresh(@Req() { user, res }: Request) {
+        // Logic to generate new ITokens
+      }
+      ```
 - **`AuthService` Lifecycle**:
     1. **Hashing**: Password and Refresh tokens are hashed via `bcrypt` before DB storage (`hashedRt`).
     2. **Verification**: `verifyToken` performs a cross-check between the incoming cookie and the stored hash.
