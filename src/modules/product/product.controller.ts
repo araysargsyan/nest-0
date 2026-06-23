@@ -8,6 +8,7 @@ import {
   Post,
   UploadedFile,
   UploadedFiles,
+  UseGuards,
   UseInterceptors,
   // UseGuards,
 } from '@nestjs/common';
@@ -26,6 +27,7 @@ import { EnhanceFileInterceptor } from '@core/interceptors/enhanceFile';
 import { MargeFilesToBodyPipe } from '@core/pipes/marge-files-to-body.pipe';
 import { GenerateMultiFields } from '~helpers/generate-multi-fields';
 import { NestedFilesInterceptor } from '@core/interceptors/NestedFilesInterceptor';
+import { JwtAccessAuthGuard } from '@core/guards/jwt-access.guard';
 // import { User } from '~decorators/request-user.decorator';
 
 const VALID_UPLOADS_MIME_TYPES = ['image/jpeg', 'image/png'];
@@ -37,7 +39,7 @@ export class ProductController {
   }
 
   @Post()
-  // @UseGuards(JwtAccessAuthGuard)
+  @UseGuards(JwtAccessAuthGuard)
   @UseInterceptors(
     EnhanceFileInterceptor(
       FilesInterceptor,

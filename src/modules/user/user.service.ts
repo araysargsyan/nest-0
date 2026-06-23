@@ -23,26 +23,7 @@ export class UserService {
     })
   }
 
-  async clearRtById(id: number) {
-    return this.prismaService.user.updateMany({
-        where: {
-          id,
-          NOT: {
-            hashedRt: null,
-          },
-        },
-        data: {
-          hashedRt: null,
-        },
-      }).then((count) => count && true)
-  }
 
-  async updateRtById(id: number, hashedRt: string) {
-    await this.prismaService.user.update({
-      where: { id },
-      data: { hashedRt },
-    })
-  }
 
   findMany(where: Prisma.UserWhereInput) {
     return this.prismaService.user.findMany({

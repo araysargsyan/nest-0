@@ -11,7 +11,10 @@ import { ITokenPayload } from '@modules/shared/auth';
 export class AccessStrategy extends PassportStrategy(JWTStrategy, JWT_ACCESS_STRATEGY) {
   constructor(private readonly configService: ConfigService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request) => req?.cookies?.accessToken || null,
+      ]),
+      // jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: configService.get(JWT.ACCESS_SECRET, ''),
       passReqToCallback: true,
     });

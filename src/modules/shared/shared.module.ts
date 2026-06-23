@@ -3,9 +3,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UploadModule } from './upload/upload.module';
+import { RedisModule } from './redis/redis.module';
 import { resolve } from 'path';
 import { PUBLIC_FOLDER } from '~constants/global.const';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -23,9 +25,15 @@ import { ServeStaticModule } from '@nestjs/serve-static';
         },
       ],
     }),
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 10,
+    }]),
     PrismaModule,
+    RedisModule,
     AuthModule,
     UploadModule,
   ],
+  exports: [ThrottlerModule],
 })
 export class SharedModule {}

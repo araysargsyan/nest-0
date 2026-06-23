@@ -28,17 +28,18 @@
 //   .then(() => 'Get a peace')
 //   .catch(() => 'Get a pain');
 
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignInDto, SignUpDto } from './dto';
-import { IAuthResponse, ITokens } from './types';
+import { IAuthResponse, ITokens, ITokenPayload } from './types';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtAccessAuthGuard } from '@core/guards/jwt-access.guard';
 import { JwtRefreshAuthGuard } from '@core/guards/jwt-refresh.guard';
-import { REFRESH_TOKEN } from '~/constants/auth.const';
+import { ACCESS_TOKEN, REFRESH_TOKEN } from '~/constants/auth.const';
 import { JWT } from '~/constants/global.const';
 import { AllowExpiredAccess } from '~/decorators/allow-expired-access.decorator';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
@@ -57,12 +58,15 @@ export class AuthController {
 
   @Post('sign-in')
   @HttpCode(HttpStatus.OK)
-  signIn(@Body() dto: SignInDto, @Res({ passthrough: true }) res: Response): Promise<IAuthResponse> {
+  signIn(
+    @Body() dto: SignInDto, 
+    @Res({ passthrough: true }) res: Response
+  ): Promise<Pick<IAuthResponse, 'user'>> {
     return this.authService.signIn(dto).then(
       ({ accessToken, refreshToken, user }) =>
-        this.setCookie({ refreshToken }, res) && {
-          accessToken,
-          refreshToken,
+        this.setCookie({ refreshToken, accessToken }, res) && {
+          // accessToken,
+          // refreshToken,
           user,
         },
     );
@@ -72,28 +76,33 @@ export class AuthController {
   @UseGuards(JwtAccessAuthGuard)
   @AllowExpiredAccess()
   @HttpCode(HttpStatus.OK)
-  logout(@Req() { user, res }: Request) {
+  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     console.log('CONTROLLER->logout');
-    return this.authService.logout(user).then((cleared) => {
+    const refreshToken = req.cookies[REFRESH_TOKEN] || '';
+    return this.authService.logout(req.user as ITokenPayload, refreshToken).then((cleared) => {
       res.clearCookie(REFRESH_TOKEN);
-      if (!cleared) res.status(HttpStatus.NOT_MODIFIED); //! if refreshToken have been deleted from db;
+      res.clearCookie(ACCESS_TOKEN);
+      if (!cleared) res.status(HttpStatus.NOT_MODIFIED);
     });
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Get('refresh')
   @UseGuards(JwtRefreshAuthGuard)
   @HttpCode(HttpStatus.OK)
-  refresh(@Req() { user, res }: Request): Promise<IAuthResponse> {
-    console.log('Controller: refresh', user);
-    return this.authService.refresh(user).then((tokens) => {
-        this.setCookie(tokens, res)
+  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<Pick<IAuthResponse, 'user'>> {
+    console.log('Controller: refresh', req.user);
+    const oldRefreshToken = req.cookies[REFRESH_TOKEN];
+    if (!oldRefreshToken) {
+      throw new UnauthorizedException('No refresh token provided');
+    }
 
-        return {
-          ...tokens,
-          user,
-        }
-      },
-    );
+    const tokens = await this.authService.refresh(oldRefreshToken, req.user as ITokenPayload);
+    this.setCookie(tokens, res);
+
+    return {
+      user: req.user as ITokenPayload,
+    };
   }
 
   @Get('check')
@@ -111,10 +120,18 @@ export class AuthController {
     return user;
   }
 
-  private setCookie({ refreshToken }: Partial<ITokens>, res: Response) {
+  private setCookie({ refreshToken, accessToken }: Partial<ITokens>, res: Response) {
     res.cookie(REFRESH_TOKEN, refreshToken, {
       httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
       maxAge: AuthService.getJWTExpiresInMilliseconds(this.configService.get(JWT.REFRESH_EXPIRES_IN)),
+    });
+    res.cookie(ACCESS_TOKEN, accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: AuthService.getJWTExpiresInMilliseconds(this.configService.get(JWT.ACCESS_EXPIRES_IN)),
     });
 
     return true;

@@ -1,4 +1,4 @@
-import { NotFoundException, HttpException, Injectable } from '@nestjs/common';
+import { NotFoundException, HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { SignInDto, SignUpDto } from './dto';
 import { compare, hash } from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
@@ -7,6 +7,14 @@ import { ConfigService } from '@nestjs/config';
 import { ACCESS_TOKEN, REFRESH_TOKEN } from '~/constants/auth.const';
 import { JWT } from '~/constants/global.const';
 import { UserService } from '@modules/user/user.service';
+import { PrismaService } from '@modules/shared/prisma/prisma.service';
+import { RedisLockService } from '@modules/shared/redis/redis-lock.service';
+import * as crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
+
+const LOCK_TTL_SECONDS = 5;
+const GRACE_PERIOD_SECONDS = 15;
+const WAIT_TIMEOUT_MS = 4000;
 
 @Injectable()
 export class AuthService {
@@ -29,9 +37,35 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly userService: UserService
+    private readonly userService: UserService,
+    private readonly prismaService: PrismaService,
+    private readonly redisLock: RedisLockService,
   ) {
     this.initializeTokensOptions();
+  }
+
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private async createInitialSession(payload: ITokenPayload): Promise<ITokens> {
+    const tokens = await this.generateTokens(payload);
+    const tokenHash = this.hashToken(tokens.refreshToken);
+    const familyId = uuidv4();
+    
+    const refreshExpiresIn = this.configService.get(JWT.REFRESH_EXPIRES_IN, '30d');
+    const expiresAt = new Date(Date.now() + AuthService.getJWTExpiresInMilliseconds(refreshExpiresIn));
+
+    await this.prismaService.refreshToken.create({
+      data: {
+        userId: payload.id,
+        tokenHash,
+        familyId,
+        expiresAt,
+      },
+    });
+
+    return tokens;
   }
 
   async signUp({ password, ...data }: SignUpDto): Promise<IAuthResponse> {
@@ -41,8 +75,15 @@ export class AuthService {
           hash: await this.hashData(password)
       });
 
+      const tokens = await this.createInitialSession({
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        surname: newUser.surname,
+      });
+
       return {
-        ...(await this.getTokens(newUser)),
+        ...tokens,
         user: {
           id: newUser.id,
           email: newUser.email,
@@ -52,6 +93,7 @@ export class AuthService {
       };
     } catch (e) {
       console.log(e);
+      throw e;
     }
   }
 
@@ -65,8 +107,15 @@ export class AuthService {
         throw new NotFoundException('User not found::');
       }
 
+      const tokens = await this.createInitialSession({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        surname: user.surname,
+      });
+
       return {
-        ...(await this.getTokens(user)),
+        ...tokens,
         user: {
           id: user.id,
           email: user.email,
@@ -79,18 +128,99 @@ export class AuthService {
       if (e instanceof HttpException) {
         throw e;
       }
+      throw e;
     }
   }
 
-  async refresh(user: ITokenPayload): Promise<ITokens> {
-    return await this.getTokens(user);
+  async refresh(oldRefreshToken: string, payload: ITokenPayload): Promise<ITokens> {
+    const tokenHash = this.hashToken(oldRefreshToken);
+    const lockKey = `refresh:lock:${tokenHash}`;
+    const channelKey = `refresh:channel:${tokenHash}`;
+
+    const acquired = await this.redisLock.acquireLock(lockKey, LOCK_TTL_SECONDS);
+
+    if (!acquired) {
+      try {
+        const result = await this.redisLock.waitForResult(channelKey, WAIT_TIMEOUT_MS);
+        return JSON.parse(result);
+      } catch {
+        throw new UnauthorizedException('Refresh timeout, please retry');
+      }
+    }
+
+    try {
+      const cached = await this.redisLock.getGraceResult(channelKey);
+      if (cached) return JSON.parse(cached);
+
+      const tokenRecord = await this.prismaService.refreshToken.findUnique({
+        where: { tokenHash },
+      });
+
+      if (!tokenRecord) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      if (tokenRecord.expiresAt < new Date()) {
+        throw new UnauthorizedException('Refresh token expired');
+      }
+
+      if (tokenRecord.revoked || tokenRecord.usedAt !== null) {
+        await this.prismaService.refreshToken.updateMany({
+          where: { familyId: tokenRecord.familyId },
+          data: { revoked: true },
+        });
+        throw new UnauthorizedException('Token reuse detected, session revoked');
+      }
+
+      const newTokens = await this.generateTokens(payload);
+      const newHash = this.hashToken(newTokens.refreshToken);
+      
+      const refreshExpiresIn = this.configService.get(JWT.REFRESH_EXPIRES_IN, '30d');
+      const expiresAt = new Date(Date.now() + AuthService.getJWTExpiresInMilliseconds(refreshExpiresIn));
+
+      await this.prismaService.$transaction([
+        this.prismaService.refreshToken.update({
+          where: { id: tokenRecord.id },
+          data: { usedAt: new Date(), revoked: true },
+        }),
+        this.prismaService.refreshToken.create({
+          data: {
+            userId: payload.id,
+            tokenHash: newHash,
+            familyId: tokenRecord.familyId,
+            expiresAt,
+          },
+        }),
+      ]);
+
+      const responsePayload = JSON.stringify(newTokens);
+      await this.redisLock.publishResult(channelKey, responsePayload, GRACE_PERIOD_SECONDS);
+
+      return newTokens;
+    } finally {
+      await this.redisLock.releaseLock(lockKey);
+    }
   }
 
-  async logout(user: ITokenPayload) {
+  async logout(user: ITokenPayload, refreshToken: string): Promise<boolean> {
     try {
-      return await this.userService.clearRtById(user.id);
+      if (!refreshToken) return false;
+      const tokenHash = this.hashToken(refreshToken);
+      const tokenRecord = await this.prismaService.refreshToken.findUnique({
+        where: { tokenHash },
+      });
+
+      if (tokenRecord) {
+        await this.prismaService.refreshToken.updateMany({
+          where: { familyId: tokenRecord.familyId },
+          data: { revoked: true },
+        });
+        return true;
+      }
+      return false;
     } catch (e) {
       console.log(e, 'LOGOUT');
+      return false;
     }
   }
 
@@ -101,28 +231,34 @@ export class AuthService {
   async verifyToken(userId: number, token: string, secret: string): Promise<boolean> {
     const isRtValid = await this.jwtService.verifyAsync(token, { secret }).catch(() => false);
 
-    if (!isRtValid) {
-      await this.userService.clearRtById(userId);
+    const tokenHash = this.hashToken(token);
 
+    if (!isRtValid) {
+      const tokenRecord = await this.prismaService.refreshToken.findUnique({
+        where: { tokenHash },
+      });
+      if (tokenRecord) {
+        await this.prismaService.refreshToken.updateMany({
+          where: { familyId: tokenRecord.familyId },
+          data: { revoked: true },
+        });
+      }
       return false;
     }
 
-    const hashedRt = (await this.userService.findUnique(
-      userId, { hashedRt: true })
-    ).hashedRt || '';
+    const tokenRecord = await this.prismaService.refreshToken.findUnique({
+      where: { tokenHash },
+    });
 
-    return await compare(token, hashedRt);
+    if (!tokenRecord || tokenRecord.revoked || tokenRecord.expiresAt < new Date()) {
+      return false;
+    }
+
+    return true;
   }
 
   private hashData(data: string): Promise<string> {
     return hash(data, 10);
-  }
-
-  private async getTokens({ id, ...data }: ITokenPayload): Promise<ITokens> {
-    const tokens = await this.generateTokens({ id, ...data });
-    await this.updateUserHashedRt(id, tokens.refreshToken);
-
-    return tokens;
   }
 
   private async generateTokens(payload: ITokenPayload): Promise<ITokens> {
@@ -133,15 +269,11 @@ export class AuthService {
   }
 
   private async createToken(payload: ITokenPayload, type): Promise<string> {
-    const a: any = payload;
+    const a: any = { ...payload };
     delete a.exp;
     delete a.iat;
+    a.jti = uuidv4(); // unique JWT ID — prevents identical tokens when signed in the same second
     return await this.jwtService.signAsync(a, this.tokensOptions[type]);
-  }
-
-  private async updateUserHashedRt(userId: number, refreshToken: string) {
-    const hashedRt = await this.hashData(refreshToken);
-    await this.userService.updateRtById(userId, hashedRt);
   }
 
   private initializeTokensOptions() {

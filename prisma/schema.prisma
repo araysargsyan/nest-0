@@ -23,9 +23,9 @@ model User {
   surname  String
   email    String    @unique
   hash     String
-  hashedRt String?
 
-  products Product[] @relation("UserProducts")
+  products      Product[]      @relation("UserProducts")
+  refreshTokens RefreshToken[] @relation("UserRefreshTokens")
 
   @@map("users")
 }
@@ -43,4 +43,18 @@ model Product {
   user      User     @relation("UserProducts", fields: [userId], references: [id])
 
   @@map("products")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  userId     Int
+  user       User     @relation("UserRefreshTokens", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  familyId   String
+  revoked    Boolean  @default(false)
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@map("refresh_tokens")
 }
