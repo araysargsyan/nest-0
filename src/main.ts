@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { useContainer } from 'class-validator';
 import cookieParser from 'cookie-parser';
 
+
 (async function start() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
