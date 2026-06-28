@@ -52,43 +52,55 @@ In many systems, if DTO validation fails *after* a file has been uploaded, that 
 
 To handle complex operations (such as multi-part file uploads combined with database constraint validation), Nest-0 coordinates middleware, guards, interceptors, and pipes into a strict request execution pipeline.
 
-### 3.1 Request Execution Lifecycle (Happy Path)
+### 3.1 Успешный сценарий выполнения запроса (Success Path)
 
-This diagram shows how a successful request flows through the entire Nest-0 architecture:
+Эта диаграмма показывает прохождение успешного HTTP-запроса через все уровни архитектуры Nest-0:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client
-    participant Middleware as Middlewares<br/>(cookie-parser, Logger)
-    participant Guard as Guards<br/>(JwtAuth, Throttler)
-    participant Interceptor as Interceptors (Pre)<br/>(NestedFiles, EnhanceFile)
-    participant Pipe1 as GlobalValidationPipe<br/>(DTO & @IsUnique DB Check)
-    participant Pipe2 as FileValidationPipe<br/>(Magic Number File Check)
-    participant Pipe3 as MargeFilesPipe<br/>(Merge files into Body)
-    participant Controller as Controller & Service<br/>(Business Logic)
-    participant InterceptorPost as ResponseInterceptor (Post)<br/>(Exclude / Serialization)
+    actor Client as Клиент
     
-    Client->>Middleware: HTTP Request (e.g., Multipart Form Data)
+    box rgb(30, 41, 59) "HTTP & Security Layer"
+        participant Middleware as Middlewares<br/>(cookie-parser, Logger)
+        participant Guard as Guards<br/>(JwtAuth, Throttler)
+    end
+    
+    box rgb(15, 118, 110) "File Parsing Layer"
+        participant Interceptor as Interceptors (Pre)<br/>(NestedFiles, EnhanceFile)
+    end
+    
+    box rgb(180, 83, 9) "Validation Layer"
+        participant Pipe1 as GlobalValidationPipe<br/>(DTO & @IsUnique DB Check)
+        participant Pipe2 as FileValidationPipe<br/>(Magic Number File Check)
+        participant Pipe3 as MargeFilesPipe<br/>(Merge files into Body)
+    end
+    
+    box rgb(30, 41, 59) "Application Core"
+        participant Controller as Controller & Service<br/>(Business Logic)
+        participant InterceptorPost as ResponseInterceptor (Post)<br/>(Exclude / Serialization)
+    end
+    
+    Client->>Middleware: HTTP Request (Multipart Form Data)
     activate Middleware
     Note over Middleware: Parses cookies, logs request
     Middleware->>Guard: Pass request
     deactivate Middleware
     activate Guard
-    Note over Guard: Validates JWT, sets req.user
+    Note over Guard: Validates JWT, checks rate limits
     Guard->>Interceptor: Pass request
     deactivate Guard
     activate Interceptor
-    Note over Interceptor: Multer saves files to disk (temp)
+    Note over Interceptor: Multer saves files to temporary disk
     Interceptor->>Pipe1: Pass files + body
     deactivate Interceptor
     activate Pipe1
-    Note over Pipe1: Validates DTO & runs unique DB checks
-    Pipe1->>Pipe2: Pass (Happy Path)
+    Note over Pipe1: Validates DTO & database uniqueness constraints
+    Pipe1->>Pipe2: Pass valid body
     deactivate Pipe1
     activate Pipe2
-    Note over Pipe2: Validates file mime-type & size
-    Pipe2->>Pipe3: Pass (Happy Path)
+    Note over Pipe2: Validates file magic numbers (mime-type & size)
+    Pipe2->>Pipe3: Pass valid files
     deactivate Pipe2
     activate Pipe3
     Note over Pipe3: Merges files array into DTO body
@@ -99,60 +111,40 @@ sequenceDiagram
     Controller->>InterceptorPost: Return response data
     deactivate Controller
     activate InterceptorPost
-    Note over InterceptorPost: Serializes entities, strips @Exclude
+    Note over InterceptorPost: Serializes entities, strips @Exclude fields
     InterceptorPost->>Client: HTTP 200/201 JSON Response
     deactivate InterceptorPost
 ```
 
-### 3.2 Atomic Rollback Lifecycle (Validation & Constraint Failures)
+### 3.2 Сценарий с ошибками валидации и откатом (Validation Failure & Rollback)
 
-This diagram shows how the system automatically cleans up side effects (specifically temporary files uploaded to disk) if a request fails at any point in the validation chain:
+Блок-схема обработки ошибок и автоматического удаления («отката») временных файлов при нарушении DTO-валидации или ограничений на файлы:
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant Interceptor as Interceptor<br/>(Saves files to disk)
-    participant Pipe1 as GlobalValidationPipe<br/>(DTO Check)
-    participant Pipe2 as FileValidationPipe<br/>(File Check)
-    participant Filter as HttpExceptionFilter<br/>(Exception Filter)
+graph TD
+    classDef startEnd fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#fff;
+    classDef process fill:#1e293b,stroke:#475569,stroke-width:1px,color:#fff;
+    classDef success fill:#064e3b,stroke:#059669,stroke-width:2px,color:#fff;
+    classDef failure fill:#7f1d1d,stroke:#dc2626,stroke-width:2px,color:#fff;
 
-    Client->>Interceptor: HTTP Multipart Request (Files + Fields)
-    activate Interceptor
-    Note over Interceptor: Saves uploaded files to temp folder
-    Interceptor->>Pipe1: Pass
-    deactivate Interceptor
-    activate Pipe1
+    StartNode([Клиент отправляет Multipart Request]):::startEnd --> SaveFiles[Interceptor сохраняет файлы во временную папку на диске]:::process
+    SaveFiles --> Pipe1{GlobalValidationPipe:<br/>DTO и Уникальность?}:::process
     
-    alt Scenario A: DTO / Uniqueness Check Fails
-        Note over Pipe1: Validation fails (e.g. Email not unique)
-        Note over Pipe1: Marks request: BODY_ERRORED = true
-        Pipe1-->>Pipe2: Pass error state
-        deactivate Pipe1
-        activate Pipe2
-        Note over Pipe2: Detects BODY_ERRORED is true
-        Note over Pipe2: Deletes temp files from disk 🗑️
-        Pipe2-->>Filter: Throws BadRequestException
-        deactivate Pipe2
-        activate Filter
-        Note over Filter: Formats standard error payload
-        Filter-->>Client: HTTP 400 Bad Request Response
-    else Scenario B: File Validation Fails (Mime-type / Size)
-        activate Pipe1
-        Note over Pipe1: DTO checks pass
-        Pipe1->>Pipe2: Pass
-        deactivate Pipe1
-        activate Pipe2
-        Note over Pipe2: Validates file magic numbers
-        Note over Pipe2: Validation fails (wrong format/too large)
-        Note over Pipe2: Deletes temp files from disk 🗑️
-        Pipe2-->>Filter: Throws BadRequestException
-        deactivate Pipe2
-        activate Filter
-        Note over Filter: Formats standard error payload
-        Filter-->>Client: HTTP 400 Bad Request Response
-        deactivate Filter
-    end
+    Pipe1 -- Ошибка валидации --> MarkErrored[Устанавливает флаг BODY_ERRORED = true]:::process
+    MarkErrored --> Pipe2Error{FileValidationPipe}:::process
+    Pipe2Error --> DeleteFilesError[Удаляет временные файлы с диска 🗑️]:::failure
+    DeleteFilesError --> ThrowError[Генерирует BadRequestException]:::process
+    
+    Pipe1 -- Успешно --> Pipe2{FileValidationPipe:<br/>Тип и размер файла?}:::process
+    
+    Pipe2 -- Ошибка валидации --> DeleteFilesError
+    
+    Pipe2 -- Успешно --> Pipe3[MargeFilesPipe:<br/>Слияние файлов в Body]:::process
+    Pipe3 --> Controller[Controller & Service:<br/>Выполнение бизнес-логики]:::success
+    
+    ThrowError --> Filter[HttpExceptionFilter:<br/>Форматирование JSON ответа]:::process
+    Filter --> ClientResponse([Клиент получает HTTP 400 Error Response]):::startEnd
+    Controller --> ClientSuccess([Клиент получает HTTP 200/201 Success Response]):::startEnd
 ```
 
 ---
