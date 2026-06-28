@@ -52,14 +52,14 @@ In many systems, if DTO validation fails *after* a file has been uploaded, that 
 
 To handle complex operations (such as multi-part file uploads combined with database constraint validation), Nest-0 coordinates middleware, guards, interceptors, and pipes into a strict request execution pipeline.
 
-### 3.1 Успешный сценарий выполнения запроса (Success Path)
+### 3.1 Success Path: Request Execution Lifecycle
 
-Эта диаграмма показывает прохождение успешного HTTP-запроса через все уровни архитектуры Nest-0:
+This diagram shows how a successful request flows through the entire Nest-0 architecture:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Клиент
+    actor Client as Client
     
     box rgb(30, 41, 59) "HTTP & Security Layer"
         participant Middleware as Middlewares<br/>(cookie-parser, Logger)
@@ -116,9 +116,9 @@ sequenceDiagram
     deactivate InterceptorPost
 ```
 
-### 3.2 Сценарий с ошибками валидации и откатом (Validation Failure & Rollback)
+### 3.2 Validation Failure & Rollback Path
 
-Блок-схема обработки ошибок и автоматического удаления («отката») временных файлов при нарушении DTO-валидации или ограничений на файлы:
+This flowchart shows how the system automatically cleans up side effects (deleting temporary files from disk) if a request fails DTO or File validation:
 
 ```mermaid
 graph TD
@@ -127,24 +127,24 @@ graph TD
     classDef success fill:#064e3b,stroke:#059669,stroke-width:2px,color:#fff;
     classDef failure fill:#7f1d1d,stroke:#dc2626,stroke-width:2px,color:#fff;
 
-    StartNode([Клиент отправляет Multipart Request]):::startEnd --> SaveFiles[Interceptor сохраняет файлы во временную папку на диске]:::process
-    SaveFiles --> Pipe1{GlobalValidationPipe:<br/>DTO и Уникальность?}:::process
+    StartNode([Client sends Multipart Request]):::startEnd --> SaveFiles[Interceptor saves files to temporary folder on disk]:::process
+    SaveFiles --> Pipe1{GlobalValidationPipe:<br/>DTO & Uniqueness Check}:::process
     
-    Pipe1 -- Ошибка валидации --> MarkErrored[Устанавливает флаг BODY_ERRORED = true]:::process
+    Pipe1 -- Validation Error --> MarkErrored[Set flag BODY_ERRORED = true]:::process
     MarkErrored --> Pipe2Error{FileValidationPipe}:::process
-    Pipe2Error --> DeleteFilesError[Удаляет временные файлы с диска 🗑️]:::failure
-    DeleteFilesError --> ThrowError[Генерирует BadRequestException]:::process
+    Pipe2Error --> DeleteFilesError[Delete temporary files from disk 🗑️]:::failure
+    DeleteFilesError --> ThrowError[Throw BadRequestException]:::process
     
-    Pipe1 -- Успешно --> Pipe2{FileValidationPipe:<br/>Тип и размер файла?}:::process
+    Pipe1 -- Success --> Pipe2{FileValidationPipe:<br/>Mime-type & Size Check}:::process
     
-    Pipe2 -- Ошибка валидации --> DeleteFilesError
+    Pipe2 -- Validation Error --> DeleteFilesError
     
-    Pipe2 -- Успешно --> Pipe3[MargeFilesPipe:<br/>Слияние файлов в Body]:::process
-    Pipe3 --> Controller[Controller & Service:<br/>Выполнение бизнес-логики]:::success
+    Pipe2 -- Success --> Pipe3[MargeFilesPipe:<br/>Merge files into Body]:::process
+    Pipe3 --> Controller[Controller & Service:<br/>Execute Business Logic]:::success
     
-    ThrowError --> Filter[HttpExceptionFilter:<br/>Форматирование JSON ответа]:::process
-    Filter --> ClientResponse([Клиент получает HTTP 400 Error Response]):::startEnd
-    Controller --> ClientSuccess([Клиент получает HTTP 200/201 Success Response]):::startEnd
+    ThrowError --> Filter[HttpExceptionFilter:<br/>Format JSON Error Response]:::process
+    Filter --> ClientResponse([Client receives HTTP 400 Error Response]):::startEnd
+    Controller --> ClientSuccess([Client receives HTTP 200/201 Success Response]):::startEnd
 ```
 
 ---
