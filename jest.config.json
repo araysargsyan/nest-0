@@ -1,24 +1,40 @@
 {
-  "moduleFileExtensions": [
-    "js",
-    "json",
-    "ts"
-  ],
-  "rootDir": "src",
-  "testRegex": ".*\\.spec\\.ts$",
-  "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
-  },
-  "collectCoverageFrom": [
-    "**/*.(t|j)s"
-  ],
-  "coverageDirectory": "../coverage",
-  "testEnvironment": "node",
-  "moduleNameMapper": {
-    "^@/(.*)$": "<rootDir>/$1",
-    "^@core/(.*)$": "<rootDir>/core/$1",
-    "^@modules/(.*)$": "<rootDir>/modules/$1",
-    "^~/(.*)$": "<rootDir>/common/$1",
-    "^~(.*)$": "<rootDir>/common/$1"
-  }
+  "projects": [
+    {
+      "displayName": "unit",
+      "moduleFileExtensions": ["js", "json", "ts"],
+      "rootDir": "src",
+      "testRegex": ".*\\.spec\\.ts$",
+      "transform": {
+        "^.+\\.(t|j)s$": "ts-jest"
+      },
+      "collectCoverageFrom": ["**/*.(t|j)s"],
+      "coverageDirectory": "../coverage",
+      "testEnvironment": "node",
+      "moduleNameMapper": {
+        "^@/(.*)$": "<rootDir>/$1",
+        "^@core/(.*)$": "<rootDir>/core/$1",
+        "^@modules/(.*)$": "<rootDir>/modules/$1",
+        "^~/(.*)$": "<rootDir>/common/$1",
+        "^~(.*)$": "<rootDir>/common/$1"
+      }
+    },
+    {
+      "displayName": "e2e",
+      "moduleFileExtensions": ["js", "json", "ts"],
+      "rootDir": "test",
+      "testRegex": ".e2e-spec.ts$",
+      "transform": {
+        "^.+\\.(t|j)s$": "ts-jest"
+      },
+      "testEnvironment": "node",
+      "moduleNameMapper": {
+        "^@/(.*)$": "<rootDir>/../src/$1",
+        "^@core/(.*)$": "<rootDir>/../src/core/$1",
+        "^@modules/(.*)$": "<rootDir>/../src/modules/$1",
+        "^~/(.*)$": "<rootDir>/../src/common/$1",
+        "^~(.*)$": "<rootDir>/../src/common/$1"
+      }
+    }
+  ]
 }

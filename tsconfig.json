@@ -30,5 +30,6 @@
       "@*": ["./src/*"],
       "~*": ["./src/common/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts", "prisma.config.ts"]
 }
