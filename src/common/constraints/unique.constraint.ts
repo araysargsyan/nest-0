@@ -1,4 +1,5 @@
-import { Injectable, Provider, Type } from '@nestjs/common';
+import { Injectable, Provider } from '@nestjs/common';
+import type { Type } from '@nestjs/common';
 import {
   ValidatorConstraint,
   ValidatorConstraintInterface,

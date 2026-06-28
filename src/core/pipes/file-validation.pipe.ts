@@ -15,7 +15,7 @@ import { UploadFileTypeValidator } from './validators/upload-file.validator';
 import { ErrorHttpStatusCode } from '@nestjs/common/utils/http-error-by-code.util';
 import { Logger } from '~logger/Logger';
 import { REQUEST } from '@nestjs/core';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { unlink, rename, mkdir, writeFile } from 'fs';
 import { BODY_ERRORED, FILE_METADATA } from '~constants/core.const';
 import { dirname } from 'path';

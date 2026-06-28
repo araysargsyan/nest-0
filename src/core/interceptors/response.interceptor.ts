@@ -2,7 +2,8 @@ import { Injectable, ExecutionContext, CallHandler, Logger } from '@nestjs/commo
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {classToPlain } from 'class-transformer';
-import { ClassSerializerInterceptor, ClassSerializerInterceptorOptions } from '@nestjs/common/serializer/class-serializer.interceptor';
+import { ClassSerializerInterceptor } from '@nestjs/common/serializer/class-serializer.interceptor';
+import type { ClassSerializerInterceptorOptions } from '@nestjs/common/serializer/class-serializer.interceptor';
 
 @Injectable()
 export class ResponseInterceptor<T> extends ClassSerializerInterceptor {

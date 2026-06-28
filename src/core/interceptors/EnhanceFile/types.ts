@@ -9,7 +9,7 @@ import {
   MulterOptions as NestMulterOptions,
 } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { NestInterceptor, Type } from '@nestjs/common';
-import { INestedFileInterceptorOptions, NestedFilesInterceptor } from '../nestedFilesInterceptor';
+import { INestedFileInterceptorOptions, NestedFilesInterceptor } from '../NestedFilesInterceptor';
 
 
 type TFileInterceptor =
@@ -31,15 +31,15 @@ interface MulterOptions<T extends TFileInterceptor = TFileInterceptor> extends N
         : null,
 }
 
-type EnhanceMulterOptions<T extends TFileInterceptor = TFileInterceptor> = T extends typeof AnyFilesInterceptor
-  ? (NestMulterOptions & {
-    errorFieldname?: string
-    field?: never
-  })
-  : T extends typeof FileFieldsInterceptor
-    ? MulterOptions<T> & { errorFieldname?: string }
-    : T extends typeof NestedFilesInterceptor
-      ? INestedFileInterceptorOptions
+type EnhanceMulterOptions<T extends TFileInterceptor = TFileInterceptor> = T extends typeof NestedFilesInterceptor
+  ? INestedFileInterceptorOptions
+  : T extends typeof AnyFilesInterceptor
+    ? (NestMulterOptions & {
+      errorFieldname?: string
+      field?: never
+    })
+    : T extends typeof FileFieldsInterceptor
+      ? MulterOptions<T> & { errorFieldname?: string }
       : MulterOptions<T>
 
 type TEnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor> = {
@@ -49,7 +49,7 @@ type TEnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor> = {
   ): Type<NestInterceptor>;
 }
 
-export {
+export type {
   TFileInterceptor,
   EnhanceMulterOptions,
   TEnhanceFileInterceptor

@@ -3,6 +3,6 @@ interface IUniquesMetadata {
   method?: string
 }
 
-export {
+export type {
   IUniquesMetadata,
 }

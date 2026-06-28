@@ -1,6 +1,6 @@
 import { Inject, Injectable, mixin, PipeTransform } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { isArray } from 'class-validator';
 import { FILE_METADATA } from '~constants/core.const';
 import { Logger } from '~logger/Logger';

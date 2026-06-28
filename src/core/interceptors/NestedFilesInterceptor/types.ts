@@ -37,7 +37,7 @@ type TIsValidFileReturn = {
   error?: string
 }
 
-export {
+export type {
   TNestedMulterField,
   TIsValidFileReturn,
   INestedFileInterceptorOptions,

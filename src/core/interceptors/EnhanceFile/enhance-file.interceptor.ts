@@ -29,7 +29,8 @@ import {
 //* handling multer errors
 //* passing metadata into request.route or files object(for file-validation.pipe)
 export default function EnhanceFileInterceptor<T extends TFileInterceptor = TFileInterceptor>(
-  ...[fileInterceptor, options]: Parameters<TEnhanceFileInterceptor<T>>
+  fileInterceptor: T,
+  options: EnhanceMulterOptions<T>,
 ): Type<NestInterceptor> {
   @Injectable()
   class MixinInterceptor implements NestInterceptor {

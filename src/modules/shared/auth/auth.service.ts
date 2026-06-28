@@ -278,8 +278,8 @@ export class AuthService {
 
   private initializeTokensOptions() {
     this.tokensOptions.accessToken.secret = this.configService.get(JWT.ACCESS_SECRET, '');
-    this.tokensOptions.accessToken.expiresIn = this.configService.get(JWT.ACCESS_EXPIRES_IN, '');
+    this.tokensOptions.accessToken.expiresIn = this.configService.get<any>(JWT.ACCESS_EXPIRES_IN, '');
     this.tokensOptions.refreshToken.secret = this.configService.get(JWT.REFRESH_SECRET, '');
-    this.tokensOptions.refreshToken.expiresIn = this.configService.get(JWT.REFRESH_EXPIRES_IN, '');
+    this.tokensOptions.refreshToken.expiresIn = this.configService.get<any>(JWT.REFRESH_EXPIRES_IN, '');
   }
 }

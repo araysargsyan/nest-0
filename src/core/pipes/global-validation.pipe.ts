@@ -12,7 +12,7 @@ import { validate, ValidatorOptions } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { TExtraValidatorOptions } from './types';
 import { REQUEST } from '@nestjs/core';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { IUniquesMetadata } from '~types';
 import { Logger } from '~logger/Logger';
 import { BODY_ERRORED, HAS_UNIQUE, UNIQUES_METADATA, VALIDATOR_OPTIONS } from '~constants/core.const';

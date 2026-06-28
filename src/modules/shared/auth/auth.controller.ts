@@ -32,7 +32,6 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards,
 import { AuthService } from './auth.service';
 import { SignInDto, SignUpDto } from './dto';
 import { IAuthResponse, ITokens, ITokenPayload } from './types';
-import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtAccessAuthGuard } from '@core/guards/jwt-access.guard';
 import { JwtRefreshAuthGuard } from '@core/guards/jwt-refresh.guard';
@@ -40,6 +39,8 @@ import { ACCESS_TOKEN, REFRESH_TOKEN } from '~/constants/auth.const';
 import { JWT } from '~/constants/global.const';
 import { AllowExpiredAccess } from '~/decorators/allow-expired-access.decorator';
 import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
+
 
 @Controller('auth')
 export class AuthController {
@@ -59,7 +60,7 @@ export class AuthController {
   @Post('sign-in')
   @HttpCode(HttpStatus.OK)
   signIn(
-    @Body() dto: SignInDto, 
+    @Body() dto: SignInDto,
     @Res({ passthrough: true }) res: Response
   ): Promise<Pick<IAuthResponse, 'user'>> {
     return this.authService.signIn(dto).then(

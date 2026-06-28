@@ -23,7 +23,7 @@ import {
   FilesInterceptor,
 } from '@nestjs/platform-express';
 import { FileValidationPipe } from '@core/pipes/file-validation.pipe';
-import { EnhanceFileInterceptor } from '@core/interceptors/enhanceFile';
+import { EnhanceFileInterceptor } from '@core/interceptors/EnhanceFile';
 import { MargeFilesToBodyPipe } from '@core/pipes/marge-files-to-body.pipe';
 import { GenerateMultiFields } from '~helpers/generate-multi-fields';
 import { NestedFilesInterceptor } from '@core/interceptors/NestedFilesInterceptor';
