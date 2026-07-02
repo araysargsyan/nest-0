@@ -52,7 +52,7 @@ export class AuthService {
     const tokens = await this.generateTokens(payload);
     const tokenHash = this.hashToken(tokens.refreshToken);
     const familyId = uuidv4();
-    
+
     const refreshExpiresIn = this.configService.get(JWT.REFRESH_EXPIRES_IN, '30d');
     const expiresAt = new Date(Date.now() + AuthService.getJWTExpiresInMilliseconds(refreshExpiresIn));
 
@@ -98,38 +98,28 @@ export class AuthService {
   }
 
   async signIn({ email, password }: SignInDto): Promise<IAuthResponse> {
-    try {
-      const user = await this.userService.findByEmail(email);
+    const user = await this.userService.findByEmail(email);
 
-      if (!user) throw new NotFoundException('User not found');
+    if (!user || !(await compare(password, user.hash))) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
 
-      if (!(await compare(password, user.hash))) {
-        throw new NotFoundException('User not found::');
-      }
+    const tokens = await this.createInitialSession({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      surname: user.surname,
+    });
 
-      const tokens = await this.createInitialSession({
+    return {
+      ...tokens,
+      user: {
         id: user.id,
         email: user.email,
         name: user.name,
         surname: user.surname,
-      });
-
-      return {
-        ...tokens,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          surname: user.surname,
-        },
-      };
-    } catch (e) {
-      console.log(e, 666);
-      if (e instanceof HttpException) {
-        throw e;
-      }
-      throw e;
-    }
+      },
+    };
   }
 
   async refresh(oldRefreshToken: string, payload: ITokenPayload): Promise<ITokens> {
@@ -174,7 +164,7 @@ export class AuthService {
 
       const newTokens = await this.generateTokens(payload);
       const newHash = this.hashToken(newTokens.refreshToken);
-      
+
       const refreshExpiresIn = this.configService.get(JWT.REFRESH_EXPIRES_IN, '30d');
       const expiresAt = new Date(Date.now() + AuthService.getJWTExpiresInMilliseconds(refreshExpiresIn));
 
