@@ -1,8 +1,11 @@
-import { IsEmail, IsString } from 'class-validator';
+import { IsEmail, IsString, IsStrongPassword } from 'class-validator';
 import { IsUnique } from '~/decorators/is-unique.decorator';
 
 class BaseAuthDto {
   @IsString()
+  @IsStrongPassword({}, {
+    message: 'Password is too weak. It must be at least 8 characters long and contain uppercase, lowercase, numbers, and symbols.',
+  })
   password: string;
 }
 
