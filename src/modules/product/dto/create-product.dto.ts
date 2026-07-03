@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { IsNumber, IsString, IsNotEmpty } from 'class-validator';
+import { IsNumber, IsString, IsNotEmpty, IsPositive } from 'class-validator';
 import { Exclude, Transform } from 'class-transformer';
 import { ValidatorOptions } from '~decorators/validator-options.decorator';
 
@@ -11,6 +11,7 @@ export class CreateProductDto implements Omit<Prisma.ProductCreateInput, 'user'>
 
   @IsNumber()
   @Transform(({ value }) => Number(value))
+  @IsPositive({ message: 'Price must be a positive number greater than 0' })
   price: number;
 
   @Exclude()
